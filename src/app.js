@@ -363,6 +363,9 @@ async function init() {
   pdfMode = boot.pdfMode || 'files'; pdfRates = boot.pdfRates || pdfRates; outputDirectory = boot.wordDirectory;
   $('#export-location').textContent = boot.wordDirectory || '当前用户的 Documents/Mathsnip';
   $$('.close').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+  on('#welcome-configure','click',() => { $('#welcome-dialog').close(); openSettings(); });
+  on('#welcome-demo','click',() => $('#welcome-dialog').close());
+  $('#welcome-dialog').addEventListener('close',() => { try { localStorage.setItem('mathsnip-welcome-seen','1'); } catch {} });
   initInk({api,copy,saveCurrent,openItem:async item=>{await saveCurrent();await refreshHistory();await showItem(item);}});
   initUsage({api});
   $$('[data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -452,5 +455,6 @@ async function init() {
     window.desktopCapture.onState(desktopChanged);
     await desktopChanged(await window.desktopCapture.getState());
   }
+  if (boot.installed && !state.settings.configured && !localStorage.getItem('mathsnip-welcome-seen')) modal('#welcome-dialog');
 }
 init().catch(e => { notice(e.message,true); showError(e); });

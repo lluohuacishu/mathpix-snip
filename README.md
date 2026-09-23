@@ -15,61 +15,45 @@
 - **用量统计**：查询当前 API 凭据的官方用量，查看分类、日期明细和参考费用。
 - **本地历史**：保存识别记录、原始文件和编辑内容，支持搜索、重命名与删除。
 
-## 环境要求
+## 下载与安装
 
-- Windows 10 / 11。
-- Node.js 22 或更高版本，以及 npm；`node` 和 `npm` 应已加入 `PATH`。
+**[下载最新版 Windows 安装包](https://github.com/lluohuacishu/mathpix-snip/releases/latest)**
+
+在 Releases 页面的 **Assets** 中选择：
+
+| 文件 | 适用方式 |
+| --- | --- |
+| `Math-Snip-Setup-版本号-x64.exe` | **推荐**。双击安装，可选择安装位置，并创建桌面与开始菜单快捷方式 |
+| `Math-Snip-版本号-x64.zip` | 免安装版。完整解压到固定文件夹，再双击 `Math Snip.exe`；不要在压缩包内直接运行 |
+| `SHA256SUMS.txt` | 下载文件的 SHA-256 校验值 |
+
+安装包和免安装版均自带运行环境，**无需安装 Node.js、npm 或执行命令**。GitHub 自动提供的 `Source code` 是源代码，不是可直接使用的软件。
+
+当前版本支持 Windows 10 / 11（x64）。发行文件暂未进行代码签名，Windows 可能显示“未知发布者”；请核对下载来源为本仓库的 Releases。
+
+### 首次使用
+
+1. 从桌面或开始菜单打开 **Math Snip**。
+2. 在首次引导中点击 **配置 API**，填写自己的 Mathpix App ID 和 App Key；也可以先体验演示。
+3. 按 `Alt + Shift + Q` 截图，调整选框后按 `Enter` 识别。
+
+勾选“记住密钥”后，凭据通过 Windows 当前用户加密保存；不勾选则仅保存在本次运行的内存中。每位使用者需要配置自己的 API，软件不附带共享密钥。
+
+关闭主窗口会隐藏到托盘，截图快捷键和后台任务仍可使用。右键托盘图标，选择 **退出 Math Snip** 才会完全退出。
+
+### 更新与卸载
+
+从托盘菜单选择 **下载新版 / 查看版本** 打开 Releases。当前采用手动更新：先从托盘退出，再运行新版安装包；免安装版请将新版本完整解压到新文件夹后启动。
+
+运行数据保存在安装目录之外，同一 Windows 用户下的安装版与免安装版共用数据，正常更新会保留配置和历史。可通过 Windows 的“已安装的应用”卸载安装版；卸载会保留用户数据和导出的文档，便于以后恢复使用。
+
+## 使用要求
+
+- Windows 10 / 11（x64）。
 - 可用的 Mathpix API App ID 和 App Key。
 - 如需打开 DOCX，请安装支持该格式的应用，例如 Microsoft Word 或 WPS。
 
 识别与官方转换需要网络连接。macOS 和 Linux 暂未提供完整适配，Windows 密钥保存、全局截图及文件打开流程不应视为跨平台功能。
-
-## 快速开始
-
-### 1. 安装与构建
-
-下载或克隆本仓库，在项目根目录运行：
-
-```sh
-npm ci
-npm run build
-```
-
-安装过程会下载 Electron 运行时。构建产物 `public/app.js` 不纳入版本控制，首次启动前需要执行构建。
-
-### 2. 启动桌面版
-
-```sh
-npm run desktop
-```
-
-也可以在完成安装和构建后，双击 `启动工具.cmd`。可为该文件创建桌面快捷方式。
-
-仅在后台托盘启动：
-
-```sh
-npm run desktop -- --background
-```
-
-关闭主窗口会隐藏到托盘，截图快捷键和后台任务仍可使用。右键托盘图标，选择 **退出 Math Snip** 才会完全退出。更新代码并重新构建后，需要退出并重新启动桌面版。
-
-### 3. 配置 API
-
-在界面中打开 **API 设置**，填写自己的 App ID 和 App Key。
-
-- 未勾选“记住密钥”：仅在当前服务进程内保存。
-- 勾选“记住密钥”：使用 Windows DPAPI 加密，保存于 `data/credentials.dpapi`，绑定当前 Windows 用户。
-- 未配置 API 时，可使用预置演示、编辑和公式预览；演示内容不会调用识别接口。
-
-API 凭据也可通过进程环境变量 `MATHPIX_APP_ID`、`MATHPIX_APP_KEY` 提供。已有本机加密配置会在启动时加载；应用不会自动读取 `.env` 文件。
-
-### 浏览器模式
-
-```sh
-npm start
-```
-
-打开 <http://127.0.0.1:47831/>。浏览器模式不注册全局截图快捷键，可使用系统截图后粘贴到页面。
 
 ## 使用说明
 
@@ -140,21 +124,43 @@ Documents/Mathsnip/
 - 服务仅监听 `127.0.0.1`，用于单用户本机工作流，不作为公网服务部署。
 - API Key 由本地服务发送给 Mathpix，不写入前端源码或浏览器草稿。
 - 图片、PDF 和手写内容在请求识别时发送到 Mathpix；Word 转换会发送相应 MMD。请求设置 `improve_mathpix: false`，数据保留规则以官方政策为准。
-- `data/` 保存加密凭据、历史记录、原始文件、转换缓存和桌面浏览器配置；画板草稿也保存在当前浏览器的本机存储中。
+- 安装版与免安装版在 `%APPDATA%\Math Snip` 保存凭据、历史、原始文件和缓存；托盘菜单的 **打开数据目录** 可直达该文件夹。加密凭据文件为 `credentials.safe`，由 Electron 的 Windows 原生加密功能保护。
+- 源码运行的数据保存在项目内的 `data/`，凭据文件为 `credentials.dpapi`。源码版与发行版的数据相互独立，从源码版切换到发行版需重新填写 API 凭据。
+- 画板草稿保存在桌面应用的浏览器配置中；通过浏览器模式打开时，保存在所用浏览器的本机存储中。
 - `work/` 用于开发过程的临时文件，可能包含测试数据或诊断输出。
 
-`.gitignore` 已排除运行数据、环境配置、凭据文件、缓存、日志、临时文件和构建产物。**分享项目时仅分享源代码，不要直接打包整个运行目录。** `.gitignore` 不会移除已经进入 Git 历史的文件；若密钥曾被提交，应撤销该密钥并清理历史。
+`.gitignore` 已排除运行数据、环境配置、凭据文件、缓存、日志、临时文件和构建产物。发行构建使用文件白名单，不收录运行数据。分享软件请使用 Releases 中的安装包或 ZIP，分享源码不要打包整个工作目录。`.gitignore` 不会移除已经进入 Git 历史的文件；若密钥曾被提交，应撤销该密钥并清理历史。
 
 ## 开发
+
+源码运行需要 Node.js 22 或更高版本及 npm，并将其加入 `PATH`。克隆仓库后，在项目根目录执行：
+
+```sh
+npm ci
+npm run build
+npm run desktop
+```
+
+安装依赖时会下载 Electron。前端构建产物 `public/app.js` 不纳入版本控制，首次启动前需要构建；也可在完成构建后双击 `启动工具.cmd`。后台启动使用 `npm run desktop -- --background`。
+
+浏览器模式使用 `npm start`，随后打开 <http://127.0.0.1:47831/>。该模式不注册全局截图快捷键，可使用系统截图后粘贴到页面。
+
+API 凭据也可通过进程环境变量 `MATHPIX_APP_ID`、`MATHPIX_APP_KEY` 提供。已有本机加密配置会在启动时加载；应用不会自动读取 `.env` 文件。
 
 ```sh
 npm run build          # 构建前端
 npm test               # API 与逻辑测试
 npm run test:desktop   # Windows 桌面集成测试
 npm run test:features  # 手写板与用量界面测试
+npm run dist:win       # 生成 Windows x64 安装包和 ZIP
+npm run verify:package # 检查发行包的文件白名单
+npm run test:packaged  # 验证独立程序、首次引导和加密保存
+npm run checksums      # 生成 dist/SHA256SUMS.txt
 ```
 
 集成测试使用隔离的数据目录和模拟接口。修改 `src/` 后需要重新构建，修改后端或桌面进程代码后需要重启应用。
+
+发行文件输出至 `dist/`。仓库的 **Windows release** 工作流可手动构建并创建 Release 草稿，检查附件后再发布。
 
 ### 项目结构
 
@@ -166,6 +172,7 @@ npm run test:features  # 手写板与用量界面测试
 ├── src/               # 前端源代码
 ├── tests/             # 自动化测试
 ├── server.js          # 本地 HTTP 服务
+├── electron-builder.json # Windows 发行构建与文件白名单
 ├── 启动工具.cmd        # Windows 启动入口
 ├── package.json
 └── package-lock.json
@@ -177,9 +184,9 @@ npm run test:features  # 手写板与用量界面测试
 | --- | --- |
 | `MATHPIX_APP_ID` | API App ID |
 | `MATHPIX_APP_KEY` | API App Key |
-| `SNIP_DATA_DIR` | 运行数据目录；默认项目内 `data/`，建议使用绝对路径 |
+| `SNIP_DATA_DIR` | 覆盖运行数据目录；建议使用绝对路径。发行版默认 `%APPDATA%\Math Snip`，源码版默认项目内 `data/` |
 | `PORT` | 独立浏览器服务端口；默认 `47831` |
-| `SNIP_PORT` | 桌面版服务端口；默认 `47831` |
+| `SNIP_PORT` | 桌面版服务端口；默认 `47831`，发行版在端口被占用时自动选择可用端口 |
 
 ## 常见问题
 

@@ -64,12 +64,19 @@
       <textarea id="editor" spellcheck="false" aria-label="LaTeX 和 Markdown 源码" placeholder="识别结果会出现在这里。也可以直接输入文字和 $LaTeX$ 公式…" disabled></textarea>
       <footer class="document-footer"><span id="confidence"><span class="dot"></span>就绪</span><span id="char-count">0 字符</span><span class="footer-right" id="word-status">默认生成官方 Word</span></footer>
     </section>
-    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.5.1</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
+    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.6.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
   </div>
 </main>
 <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" hidden>
 <div id="drop-overlay" hidden><i data-lucide="upload"></i><h2>松开即可导入</h2><p>图片 ≤ 15 MiB · PDF ≤ 100 MiB</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="welcome-dialog" aria-labelledby="welcome-heading">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="scan-text"></i></span><button class="icon-button close" aria-label="稍后配置"><i data-lucide="x"></i></button></div>
+  <h2 id="welcome-heading">欢迎使用 Math Snip</h2>
+  <p class="subtle">截取题目，复制公式，导出 Word。</p>
+  <ol class="help-steps"><li><strong>连接你的 Mathpix API</strong><p>填写自己的 App ID 和 App Key。识别与转换按 Mathpix 的规则计费。</p></li><li><strong>按 Alt + Shift + Q 截图</strong><p>调整选框后按 Enter 确认，也可以拖入图片或 PDF。</p></li><li><strong>校对并导出</strong><p>点击公式复制 LaTeX，Word 保存到文档目录中的 Mathsnip 文件夹。</p></li></ol>
+  <div class="modal-footer"><button class="outline" id="welcome-demo">先体验演示</button><button class="primary" id="welcome-configure">配置 API<i data-lucide="arrow-right"></i></button></div>
+</dialog>
 <dialog id="settings-dialog">
   <form id="settings-form">
     <div class="modal-heading"><span class="modal-icon"><i data-lucide="key-round"></i></span><button type="button" class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>

@@ -22,10 +22,10 @@ const require = createRequire(import.meta.url);
 const { MathpixMarkdownModel: MM } = require('mathpix-markdown-it');
 export const root = path.dirname(fileURLToPath(import.meta.url));
 
-export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.join(root, 'data'), fetchImpl, testCredentials, wordOptions, pdfOptions, wordDirectory = defaultWordDirectory, openWord, openFolder } = {}) {
+export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.join(root, 'data'), fetchImpl, testCredentials, wordOptions, pdfOptions, wordDirectory = defaultWordDirectory, openWord, openFolder, credentialCipher, installed = false } = {}) {
   await mkdir(dataDir, { recursive: true });
   const store = new Store(dataDir); await store.init();
-  const credentials = new Credentials(root, dataDir);
+  const credentials = new Credentials(root, dataDir, credentialCipher);
   if (testCredentials) credentials.value = testCredentials; else await credentials.init();
   const client = new MathpixClient({ credentials: () => credentials.value, fetchImpl });
   const ink = new InkRecognition({store,client}), usage = new UsageStats(client);
@@ -49,8 +49,8 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
     next();
   });
   app.use(express.json({ limit: '40mb' }));
-  app.get('/api/health', (req, res) => res.json({ app: 'mathpix-snip-local', version: '1.5.1', inkLayout: 2 }));
-  app.get('/api/bootstrap', (req, res) => res.json({ token, settings: credentials.public(), nativeCapture: process.platform === 'win32', wordDirectory, pdfMode, pdfRates:PDF_RATES, pdfMaxBytes:PDF_MAX_BYTES }));
+  app.get('/api/health', (req, res) => res.json({ app: 'mathpix-snip-local', version: require('./package.json').version, inkLayout: 2 }));
+  app.get('/api/bootstrap', (req, res) => res.json({ token, installed, settings: credentials.public(), nativeCapture: process.platform === 'win32', wordDirectory, pdfMode, pdfRates:PDF_RATES, pdfMaxBytes:PDF_MAX_BYTES }));
   app.get('/api/items', async (req, res) => res.json(await store.list()));
   app.post('/api/ink/recognize',async(req,res)=>res.json(await ink.recognize(req.body)));
   app.post('/api/ink/:id/save',async(req,res)=>locked('ink-'+req.params.id,async()=>res.json(await ink.save(req.params.id))));

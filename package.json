@@ -1,6 +1,6 @@
 {
   "name": "mathpix-snip-local",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -11,7 +11,12 @@
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.js",
     "test:desktop": "node scripts/test-desktop.cjs",
-    "test:features": "node scripts/test-features.cjs"
+    "test:features": "node scripts/test-features.cjs",
+    "pack:win": "npm run build && electron-builder --win --x64 --dir --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis zip --x64 --publish never",
+    "test:packaged": "node scripts/test-packaged.cjs",
+    "verify:package": "node scripts/verify-package.cjs",
+    "checksums": "node scripts/checksums.cjs"
   },
   "dependencies": {
     "dompurify": "3.3.1",
@@ -23,10 +28,18 @@
   },
   "devDependencies": {
     "electron": "44.4.3",
+    "electron-builder": "26.15.3",
     "esbuild": "0.25.12",
     "yazl": "^3.3.1"
   },
   "engines": {
     "node": ">=22"
+  },
+  "productName": "Math Snip",
+  "author": "lluohuacishu",
+  "homepage": "https://github.com/lluohuacishu/mathpix-snip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lluohuacishu/mathpix-snip.git"
   }
 }

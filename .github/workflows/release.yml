@@ -1,0 +1,40 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run dist:win
+      - run: npm run verify:package
+      - run: npm run test:packaged
+      - run: npm run checksums
+      - name: Create release draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseVersion = node -p "require('./package.json').version"
+          $releaseTag = "v$releaseVersion"
+          if ($releaseVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable semantic version.' }
+          $existing = gh release view $releaseTag --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'Release already exists. Bump package.json and package-lock.json before building a new release.' }
+          gh release create $releaseTag --draft --target $env:GITHUB_SHA --title "Math Snip $releaseTag" --notes-file .github/RELEASE_TEMPLATE.md "dist/Math-Snip-Setup-$releaseVersion-x64.exe" "dist/Math-Snip-$releaseVersion-x64.zip" dist/SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Release draft creation failed.' }

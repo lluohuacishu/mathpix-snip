@@ -1,0 +1,73 @@
+{
+  "appId": "com.mathsnip.local",
+  "productName": "Math Snip",
+  "asar": true,
+  "npmRebuild": false,
+  "directories": {
+    "output": "dist",
+    "buildResources": "assets"
+  },
+  "files": [
+    "package.json",
+    "server.js",
+    "desktop/**",
+    "lib/**",
+    "public/index.html",
+    "public/style.css",
+    "public/app.js",
+    "public/favicon.svg",
+    "public/sample.svg",
+    "assets/math-snip.ico",
+    "!**/*.map",
+    "!data/**",
+    "!work/**",
+    "!tests/**",
+    "!scripts/**",
+    "!assets/reference.docx",
+    "!public/sample.png",
+    "!**/.env*",
+    "!**/*.dpapi",
+    "!**/*.safe"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "assets/math-snip.ico",
+    "artifactName": "Math-Snip-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Math Snip",
+    "runAfterFinish": true,
+    "deleteAppDataOnUninstall": false,
+    "installerLanguages": [
+      "zh_CN",
+      "en_US"
+    ],
+    "language": "2052",
+    "artifactName": "Math-Snip-Setup-${version}-${arch}.${ext}"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "lluohuacishu",
+    "repo": "mathpix-snip",
+    "releaseType": "draft"
+  }
+}

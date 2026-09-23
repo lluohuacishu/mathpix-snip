@@ -1,12 +1,14 @@
-const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray, shell, dialog } = require('electron');
+const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, Menu, nativeImage, screen, Tray, shell, dialog, safeStorage } = require('electron');
 const path = require('node:path');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const { pixelRect, processCapture } = require('./capture-core.cjs');
-const root = path.dirname(__dirname), PORT = Number(process.env.SNIP_PORT || 47831);
-const BASE = 'http://127.0.0.1:' + PORT + '/', HOTKEY = 'Alt+Shift+Q';
+const root = path.dirname(__dirname), VERSION = require('../package.json').version;
+let PORT = Number(process.env.SNIP_PORT || 47831), BASE = 'http://127.0.0.1:' + PORT + '/';
+const HOTKEY = 'Alt+Shift+Q', RELEASES = 'https://github.com/lluohuacishu/mathpix-snip/releases/latest';
 const background = process.argv.includes('--background');
-const profile = path.join(process.env.SNIP_DATA_DIR || path.join(root, 'data'), 'desktop-shell');
+const dataDir = process.env.SNIP_DATA_DIR || (app.isPackaged ? path.join(app.getPath('appData'), 'Math Snip') : path.join(root, 'data'));
+const profile = path.join(dataDir, 'desktop-shell');
 mkdirSync(profile, { recursive: true });
 app.setPath('userData', profile);
 app.setName('Math Snip');
@@ -29,11 +31,11 @@ function update(patch) {
 }
 function writeStatus() {
   // Operational state only: never save screenshot bytes, credentials or OCR text.
-  try { writeFileSync(path.join(profile, 'status.json'), JSON.stringify({ pid: process.pid, version: '1.5.1', registered: state.registered, busy: state.busy, phase: state.phase, visible: !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible(), updatedAt: new Date().toISOString() })); } catch {}
+  try { writeFileSync(path.join(profile, 'status.json'), JSON.stringify({ pid: process.pid, version: VERSION, port: PORT, installed: app.isPackaged, registered: state.registered, busy: state.busy, phase: state.phase, visible: !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible(), updatedAt: new Date().toISOString() })); } catch {}
 }
 async function ensureServer() {
   let response;
-  try { response = await fetch(BASE + 'api/health', { signal: AbortSignal.timeout(1500) }); } catch {}
+  if (!app.isPackaged) try { response = await fetch(BASE + 'api/health', { signal: AbortSignal.timeout(1500) }); } catch {}
   if (response) {
     const health = await response.json().catch(() => ({}));
     if (!response.ok || health.app !== 'mathpix-snip-local') throw new Error('端口 ' + PORT + ' 被其他程序占用。');
@@ -41,12 +43,25 @@ async function ensureServer() {
   }
   const { createApp } = await import(pathToFileURL(path.join(root, 'server.js')).href);
   appService = await createApp({
+    dataDir, installed: app.isPackaged,
+    ...(app.isPackaged ? {
+      wordDirectory: path.join(app.getPath('documents'), 'Mathsnip'),
+      credentialCipher: {
+        protect: value => { if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows 密钥加密暂不可用，请取消记住密钥后重试。'); return safeStorage.encryptString(value).toString('base64'); },
+        unprotect: value => safeStorage.decryptString(Buffer.from(value, 'base64')),
+      },
+    } : {}),
     openFolder: folder => shell.openPath(folder).then(error => { if (error) throw new Error(error); }),
   });
-  await new Promise((resolve, reject) => {
-    localServer = appService.app.listen(PORT, '127.0.0.1', resolve);
-    localServer.once('error', reject);
-  });
+  async function listen(port) {
+    await new Promise((resolve, reject) => {
+      localServer = appService.app.listen(port, '127.0.0.1', error => error ? reject(error) : resolve());
+      localServer.once('error', reject);
+    });
+  }
+  try { await listen(PORT); }
+  catch (error) { if (!app.isPackaged || error.code !== 'EADDRINUSE') throw error; await listen(0); }
+  PORT = localServer.address().port; BASE = 'http://127.0.0.1:' + PORT + '/';
 }
 async function bootstrap() {
   const response = await fetch(BASE + 'api/bootstrap', { signal: AbortSignal.timeout(10000) });
@@ -65,7 +80,7 @@ async function api(route, method = 'GET', body) {
 function external(url) {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === 'https:' && ['mathpix.com', 'console.mathpix.com', 'accounts.mathpix.com', 'docs.mathpix.com'].includes(parsed.hostname)) shell.openExternal(url).catch(() => {});
+    if (parsed.protocol === 'https:' && (['mathpix.com', 'console.mathpix.com', 'accounts.mathpix.com', 'docs.mathpix.com'].includes(parsed.hostname) || parsed.href === RELEASES)) shell.openExternal(url).catch(() => {});
   } catch {}
 }
 function createMainWindow() {
@@ -174,6 +189,10 @@ async function boot() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 Math Snip', click: showMain },
     { label: '框选截图（Alt + Shift + Q）', click: () => void beginCapture() },
+    { type: 'separator' },
+    { label: '下载新版 / 查看版本', click: () => external(RELEASES) },
+    { label: '打开数据目录', click: () => { shell.openPath(dataDir).catch(() => {}); } },
+    { label: 'Math Snip ' + VERSION, enabled: false },
     { type: 'separator' },
     { label: '退出 Math Snip', click: () => {
       if (state.busy) { update({ detail: '请先完成或取消当前截图识别，再退出。' }); showMain(); return; }
