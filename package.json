@@ -1,0 +1,32 @@
+{
+  "name": "mathpix-snip-local",
+  "version": "1.5.1",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "description": "本地数学 OCR 工作台，支持 Mathpix API、LaTeX 和可编辑 Word 公式",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "node scripts/start-desktop.cjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js",
+    "test:desktop": "node scripts/test-desktop.cjs",
+    "test:features": "node scripts/test-features.cjs"
+  },
+  "dependencies": {
+    "dompurify": "3.3.1",
+    "express": "5.1.0",
+    "lucide": "0.468.0",
+    "mathpix-markdown-it": "3.0.1",
+    "pdf-lib": "^1.17.1",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "electron": "44.4.3",
+    "esbuild": "0.25.12",
+    "yazl": "^3.3.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

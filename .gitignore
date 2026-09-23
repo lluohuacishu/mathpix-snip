@@ -1,0 +1,51 @@
+# Dependencies and generated frontend bundles
+node_modules/
+/public/app.js
+/public/app.js.map
+/dist/
+/build/
+/coverage/
+.cache/
+
+# Runtime data: API credentials, imported files, history, browser profile, caches
+/data/
+/work/
+/exports/
+/output/
+/outputs/
+/release/
+/releases/
+/backups/
+
+# Environment files and private credentials (at any depth)
+.env
+.env.*
+!.env.example
+*.dpapi
+credentials.json
+credentials.*.json
+secrets.json
+secrets.*.json
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+
+# Private reference material from development
+/assets/reference.docx
+/public/sample.png
+
+# Local logs, temporary files and editor settings
+*.log
+*.tmp
+*.bak
+*.zip
+*.7z
+*.lnk
+*.stackdump
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Math Snip · 数学识别工作台</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/math-style.css"><link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><span class="brand-mark">m<span>✦</span></span><div>Math Snip<small>数学识别工作台</small></div></div>
+  <button class="primary new-button" id="import-side"><i data-lucide="plus"></i>导入图片或 PDF</button>
+  <button class="outline pdf-import" id="pdf-import"><i data-lucide="files"></i>PDF → Word + MD + MMD</button>
+  <input type="file" id="pdf-file" accept="application/pdf,.pdf" hidden>
+  <button class="outline feature-entry" id="open-ink"><i data-lucide="pen-tool"></i>手写公式板</button>
+  <button class="outline feature-entry" id="open-usage"><i data-lucide="chart-no-axes-combined"></i>API 用量统计</button>
+  <div class="history-heading"><span>最近记录</span><span id="history-count">0</span></div>
+  <div class="search"><i data-lucide="search"></i><input id="search" placeholder="搜索记录…" aria-label="搜索记录"></div>
+  <nav id="history" aria-label="识别历史"></nav>
+  <div class="sidebar-bottom">
+    <button id="demo"><i data-lucide="sparkles"></i>打开演示示例<span>DEMO</span></button>
+    <button id="new-text"><i data-lucide="file-pen-line"></i>新建公式笔记</button>
+    <button id="settings-side"><i data-lucide="settings-2"></i>API 设置<i data-lucide="chevron-right"></i></button>
+    <div class="local-note"><span class="dot"></span>记录保存在这台电脑上</div>
+  </div>
+</aside>
+<main>
+  <header class="topbar">
+    <div class="breadcrumb">我的工作空间<i data-lucide="chevron-right"></i><strong>识别工作台</strong></div>
+    <div class="top-actions"><button class="mode-badge" id="mode"><span class="dot"></span>尚未配置 API</button><button class="icon-button" id="help" aria-label="使用帮助"><i data-lucide="circle-help"></i></button></div>
+  </header>
+  <div class="workspace">
+    <section class="heading-row"><div><div class="eyebrow">CAPTURE · RECOGNIZE · CREATE</div><h1>让公式，回到编辑器。</h1><p>从截图到 LaTeX 和 Word，保留每一个数学细节。</p></div><button id="capture" class="outline"><i data-lucide="scan-line"></i>截取屏幕<kbd>Win ⇧ S</kbd></button></section>
+    <div id="desktop-note" class="desktop-note" role="status" hidden></div>
+    <section class="toolbar">
+      <div class="toolbar-group">
+        <button id="import"><i data-lucide="image-plus"></i>导入文件</button>
+        <button id="paste"><i data-lucide="clipboard"></i>粘贴图片</button>
+        <span class="divider"></span>
+        <button id="recognize" class="recognize"><i data-lucide="scan-text"></i>开始识别</button>
+      </div>
+      <div class="toolbar-group"><button id="copy-all"><i data-lucide="copy"></i>复制全文</button><button id="export" class="primary"><i data-lucide="file-down"></i>导出 Word</button></div>
+    </section>
+    <div class="notice" id="notice"><i data-lucide="info"></i><span>正在载入工作台…</span><button id="notice-action">API 设置<i data-lucide="arrow-up-right"></i></button></div>
+    <section id="pdf-result" class="pdf-result" hidden aria-live="polite"><strong id="pdf-result-title"></strong><p id="pdf-result-detail"></p><p id="pdf-result-files"></p><div><button class="outline" id="pdf-open-folder">打开文件夹</button><button class="primary" id="pdf-open-word">打开 Word</button><button class="outline" id="pdf-resume">继续任务</button></div></section>
+    <section class="document">
+      <div class="document-bar">
+        <div class="tabs" role="tablist" aria-label="文档视图">
+          <button class="active" data-tab="preview" role="tab" aria-selected="true"><i data-lucide="book-open"></i>识别预览</button>
+          <button data-tab="original" role="tab" aria-selected="false"><i data-lucide="image"></i>原图</button>
+          <button data-tab="data" role="tab" aria-selected="false"><i data-lucide="braces"></i>数据</button>
+        </div>
+        <div class="document-controls"><button id="equations-toggle" class="small-button active"><i data-lucide="sigma"></i>公式</button><button id="delete" class="icon-button" aria-label="删除当前记录"><i data-lucide="trash-2"></i></button></div>
+      </div>
+      <div class="document-meta"><div class="doc-name"><i data-lucide="file-text"></i><input id="title" aria-label="记录名称" value="未选择记录"><span id="demo-tag" class="tag" hidden>演示</span></div><span id="saved">自动保存</span></div>
+      <div class="document-content">
+        <div class="view" id="preview-view"><article class="paper" id="preview"><div class="empty-state"><i data-lucide="scan-text"></i><h2>把纸上的灵感带进来</h2><p>拖入图片或 PDF，或按 Ctrl + V 粘贴截图</p><button class="outline" id="empty-demo">先看看演示效果</button></div></article></div>
+        <div class="view original-view" id="original-view" hidden><div id="original"></div><button class="outline crop-button" id="crop" hidden><i data-lucide="crop"></i>裁剪为新截图</button></div>
+        <div class="view data-view" id="data-view" hidden><pre id="raw"></pre></div>
+        <aside class="equation-panel" id="equation-panel"><div class="equation-heading"><strong>公式提取</strong><span id="formula-count">0</span></div><p>点击公式，直接复制 LaTeX</p><div id="equations"></div><button id="copy-formulas" class="outline"><i data-lucide="copy"></i>复制全部公式</button></aside>
+      </div>
+      <div class="editor-bar"><div><span class="code-symbol">&lt;/&gt;</span><strong>LaTeX / Markdown</strong><span class="editor-hint">可直接编辑，预览实时更新</span></div><div><select id="delimiter" aria-label="公式复制格式"><option value="raw">纯 LaTeX</option><option value="inline">$ 行内公式 $</option><option value="block">$$ 独立公式 $$</option></select><button id="save-mmd" class="icon-button" aria-label="下载 Markdown"><i data-lucide="download"></i></button><button id="editor-copy" class="icon-button" aria-label="复制源码"><i data-lucide="copy"></i></button></div></div>
+      <textarea id="editor" spellcheck="false" aria-label="LaTeX 和 Markdown 源码" placeholder="识别结果会出现在这里。也可以直接输入文字和 $LaTeX$ 公式…" disabled></textarea>
+      <footer class="document-footer"><span id="confidence"><span class="dot"></span>就绪</span><span id="char-count">0 字符</span><span class="footer-right" id="word-status">默认生成官方 Word</span></footer>
+    </section>
+    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.5.1</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
+  </div>
+</main>
+<input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" hidden>
+<div id="drop-overlay" hidden><i data-lucide="upload"></i><h2>松开即可导入</h2><p>图片 ≤ 15 MiB · PDF ≤ 100 MiB</p></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="settings-dialog">
+  <form id="settings-form">
+    <div class="modal-heading"><span class="modal-icon"><i data-lucide="key-round"></i></span><button type="button" class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+    <h2>连接你的 Mathpix API</h2><p class="subtle">在这里填写凭据，用于识别和官方 Word 转换。尚未配置时可先体验演示、编辑和复制公式。</p>
+    <label>App ID<input id="app-id" autocomplete="off" placeholder="在 Mathpix 控制台查看" required></label>
+    <label>App Key<div class="password-field"><input id="app-key" type="password" autocomplete="new-password" placeholder="输入你的 API 密钥"><button id="show-key" type="button" class="icon-button" aria-label="显示或隐藏密钥"><i data-lucide="eye"></i></button></div></label>
+    <label class="check-label"><input type="checkbox" id="remember">在这台电脑上记住密钥</label><p class="micro">勾选后使用 Windows 当前用户加密保存；不勾选则仅在服务本次运行期间有效。</p>
+    <div class="settings-links"><a href="https://console.mathpix.com/" target="_blank" rel="noreferrer">获取 API 凭据 ↗</a><a href="https://mathpix.com/pricing/api" target="_blank" rel="noreferrer">查看 API 价格 ↗</a></div>
+    <div class="inline-error" id="settings-error" hidden></div>
+    <div class="modal-footer"><button type="button" id="clear-key" class="text-button">清除本机密钥</button><button class="primary" type="submit">保存设置<i data-lucide="check"></i></button></div>
+  </form>
+</dialog>
+<dialog id="ink-dialog" class="feature-dialog" aria-labelledby="ink-heading">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="pen-tool"></i></span><button class="icon-button close" aria-label="关闭手写板"><i data-lucide="x"></i></button></div>
+  <h2 id="ink-heading">手写公式与文字</h2><p class="subtle">手写公式，也可在指定位置插入汉字。识别后复制源码，或保存到历史继续编辑、导出 Word。</p>
+  <div class="ink-tools"><div><button id="ink-pen-tool" class="outline active">手写</button><button id="ink-text-tool" class="outline">文字</button><button id="ink-undo" class="outline"><i data-lucide="undo-2"></i>撤销一步</button><button id="ink-clear" class="outline"><i data-lucide="eraser"></i>清空</button></div><span id="ink-count" class="micro">0 笔</span></div>
+  <div id="ink-board"><canvas id="ink-canvas" width="1200" height="450" aria-label="手写公式画板"></canvas><div id="ink-text-layer"></div></div>
+  <div class="ink-tools"><label class="check-label"><input type="checkbox" id="ink-auto">停笔 1.5 秒后自动识别</label><button id="ink-recognize" class="primary">识别公式</button></div>
+  <p class="micro">点击“文字”后在指定位置输入；文字框上方可调整字号（12–96）、拖动和删除。位置、大小由你决定。混合内容按画板排布一起识别，请核对结果。<span id="ink-group-count"></span></p>
+  <p class="micro">混合画板每次使用一次图片识别，纯手写使用一次笔迹识别，公开起始价均为 $0.002 / 次。自动模式停笔后可能产生请求；关闭画板会暂停。复杂排版可保存后在源码里调整，文字和笔迹草稿保存在本机。</p>
+  <p id="ink-status" class="feature-status" role="status">在画板里写一个公式，支持鼠标、触摸和手写笔。</p>
+  <div id="ink-preview" class="ink-preview">识别结果将在这里显示</div>
+  <label for="ink-source">识别源码</label><textarea id="ink-source" readonly spellcheck="false" placeholder="LaTeX / Mathpix Markdown"></textarea>
+  <div class="modal-footer"><button class="outline" id="ink-copy" disabled><i data-lucide="copy"></i>复制 LaTeX</button><button class="primary" id="ink-save" disabled>保存到历史并打开<i data-lucide="arrow-right"></i></button></div>
+</dialog>
+<dialog id="usage-dialog" class="feature-dialog" aria-labelledby="usage-heading">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="chart-no-axes-combined"></i></span><button class="icon-button close" aria-label="关闭用量统计"><i data-lucide="x"></i></button></div>
+  <h2 id="usage-heading">API 用量统计</h2><p class="subtle">读取当前 API 凭据对应的官方用量，包含使用同一凭据的其他程序。按 UTC 日期统计，北京时间每天 08:00 分界。</p>
+  <div class="usage-presets"><button class="outline" id="usage-today">今天</button><button class="outline" id="usage-week">近 7 天</button><button class="outline" id="usage-month">本月</button></div>
+  <div class="usage-filters"><label>开始日期<input type="date" id="usage-from"></label><label>结束日期（含当天）<input type="date" id="usage-to"></label><button class="primary" id="usage-load">查询 / 刷新</button></div>
+  <p class="feature-status" id="usage-status" role="status"></p>
+  <div id="usage-content" hidden>
+    <div id="usage-summary" class="usage-summary"></div>
+    <p class="micro">单次手写识别可能计入官方 image 类别，与图片合并展示；该接口无法保证单独区分两者。格式转换记录单独列出，不与识别次数或页数相加。</p>
+    <div class="usage-estimate"><strong id="usage-cost"></strong><p id="usage-unpriced"></p><p>参考费用按公开起始单价计算，仅覆盖已知的识别类别，不是最终账单。官方用量可能延迟更新。</p></div>
+    <div class="usage-table-wrap"><table class="usage-table"><caption>按类别汇总</caption><thead><tr><th scope="col">官方类别</th><th scope="col">数量</th><th scope="col">参考费用（美元）</th></tr></thead><tbody id="usage-types"></tbody></table></div>
+    <details class="usage-details"><summary>查看逐日明细</summary><div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">日期（UTC）</th><th scope="col">官方类别</th><th scope="col">数量</th></tr></thead><tbody id="usage-daily"></tbody></table></div></details>
+  </div>
+  <div class="modal-footer"><a href="https://console.mathpix.com/" target="_blank" rel="noreferrer">官方控制台 / 账单 ↗</a><a href="https://mathpix.com/pricing/api" target="_blank" rel="noreferrer">查看价格说明 ↗</a></div>
+</dialog>
+<dialog id="export-dialog">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="file-down"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+  <h2>保存并打开 Word 文档</h2><p class="subtle">识别时默认准备官方 DOCX。保存成功后用默认的 Word / WPS 打开，无需选择目录。</p>
+  <p class="micro">保存位置：<span id="export-location"></span><br>按记录标题命名，同名文件自动加序号。公式可在 Word 中继续编辑；修改正文后会重新进行官方转换。</p>
+  <div id="export-status" class="subtle" role="status"></div>
+  <div class="modal-footer"><button class="outline close">关闭</button><button id="export-cloud" class="primary" hidden>重试 / 继续保存</button></div>
+</dialog>
+<dialog id="pdf-dialog">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="files"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+  <h2>PDF 转 Word、MD 和 MMD</h2><p id="pdf-name" class="subtle"></p>
+  <label>转换模式<select id="pdf-mode"><option value="files">经济模式 · Files API · $0.0015 / 页起</option><option value="fast">快速模式 · v3/pdf · $0.005 / 页起</option></select></label>
+  <p class="micro">经济模式等待通常较久；快速模式适合急用。仅调用你选择的接口，不会自动切换。</p>
+  <label>识别页码<input id="pdf-pages" placeholder="留空表示全文，例如 1-3,5"></label><p id="pdf-estimate" class="micro" role="status"></p>
+  <p class="micro">三份文件统一保存到 <span id="pdf-save-location"></span> 下的独立文件夹。配套图片保留，完成后自动打开 Word。</p>
+  <div class="modal-footer"><button class="outline close">取消</button><button id="pdf-start" class="primary">开始转换<i data-lucide="arrow-right"></i></button></div>
+</dialog>
+<dialog id="help-dialog">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="lightbulb"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+  <h2>三步，把截图变成文档</h2>
+  <ol class="help-steps"><li><strong>截取或导入</strong><p>桌面版按 Alt + Shift + Q 框选，松开后可移动或缩放，按 Enter 或点“识别”提交并弹出结果。Esc 或右键取消。也可以拖入图片或 PDF。</p></li><li><strong>识别和校对</strong><p>普通导入或粘贴后点击“开始识别”。切换原图核对，直接修改下方源码。</p></li><li><strong>复制或导出</strong><p>点预览中的公式复制 LaTeX，或导出带可编辑公式的 DOCX。</p></li></ol>
+  <div class="help-tip">PDF 拖入后可选经济或快速模式；完成后自动保存 DOCX、普通 MD、原始 MMD 和配图到 Documents\Mathsnip 下的独立文件夹，并打开 Word。截图结果仍可点击“导出 Word”保存打开。</div>
+  <p class="micro">快捷键截图会自动上传选区到 Mathpix。关闭桌面窗口后仍在托盘运行；右键托盘图标可退出。多屏时截取鼠标所在屏幕。浏览器版可用 Win + Shift + S 截图，再 Ctrl + V 粘贴。历史包含原文件，保存在工程的 data/items 目录。</p>
+</dialog>
+<dialog id="delete-dialog"><h2>删除这条记录？</h2><p class="subtle">将删除本机保存的原文件和识别结果。此操作不会删除 Mathpix 云端记录。</p><div class="modal-footer"><button class="outline close">取消</button><button id="delete-confirm" class="danger">删除记录</button></div></dialog>
+<dialog id="crop-dialog"><div class="modal-heading"><h2>拖动选择识别区域</h2><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="crop-area"><canvas id="crop-canvas"></canvas></div><div class="modal-footer"><span class="micro">生成新记录，保留原图</span><button id="crop-confirm" class="primary">保存裁剪</button></div></dialog>
+</body></html>

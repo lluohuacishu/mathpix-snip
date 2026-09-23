@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
+  <title id="title">两圆的公共弦示意图</title>
+  <desc id="desc">两个半径相同的圆相交，交点 A 和 B 连接成公共弦。</desc>
+  <rect width="960" height="560" rx="20" fill="#f6f8f5"/>
+  <g font-family="sans-serif" fill="#213e34">
+    <text x="48" y="65" font-size="28">两圆的公共弦</text>
+    <text x="48" y="98" font-size="16" fill="#617c6d">演示内容 · 预置公式与示意图</text>
+  </g>
+  <g fill="none" stroke-width="3">
+    <circle cx="395" cy="295" r="150" stroke="#176b57"/>
+    <circle cx="555" cy="295" r="150" stroke="#639967"/>
+    <path d="M475 168.114 V421.886" stroke="#d28545" stroke-width="4"/>
+    <path d="M395 295 H555" stroke="#8ba297" stroke-dasharray="6 6"/>
+  </g>
+  <g fill="#213e34" font-family="serif" font-size="22">
+    <circle cx="395" cy="295" r="4"/><circle cx="555" cy="295" r="4"/>
+    <text x="367" y="326">O₁</text><text x="565" y="326">O₂</text>
+    <text x="488" y="160">A</text><text x="488" y="445">B</text>
+    <text x="278" y="190">C₁</text><text x="650" y="190">C₂</text>
+    <text x="325" y="510">L = 2√(r² − d²)</text>
+  </g>
+</svg>
