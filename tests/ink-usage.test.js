@@ -50,6 +50,14 @@ test('ink accepts text-only response and never resubmits failed or interrupted r
   const file=path.join(f.dataDir,'ink-requests',body.id+'.json');const entry=JSON.parse(await readFile(file));entry.status='submitting';delete entry.result;await writeFile(file,JSON.stringify(entry));
   assert.equal((await f.request('/ink/recognize',body)).status,409);assert.equal(calls,2);
 });
+test('ink uses overall confidence and corrects legacy cached result scores without another OCR call',async t=>{
+  let calls=0;
+  const f=await fixture(t,{fetchImpl:async()=>{calls++;return json({text:'$x$',confidence:0.42,confidence_rate:0.999});}}),body=input();
+  const result=await(await f.request('/ink/recognize',body)).json();assert.equal(result.confidence,0.42);
+  const file=path.join(f.dataDir,'ink-requests',body.id+'.json'),entry=JSON.parse(await readFile(file));entry.result.confidence=0.999;await writeFile(file,JSON.stringify(entry));
+  const cached=await(await f.request('/ink/recognize',body)).json();assert.equal(cached.confidence,0.42);assert.equal(calls,1);
+  const saved=await(await f.request('/ink/'+body.id+'/save',{})).json();assert.equal(saved.confidence,0.42);assert.equal(saved.raw.confidence,0.42);
+});
 test('usage date range is inclusive UTC and rejects invalid/reversed/oversized ranges',()=>{
   assert.deepEqual(usageRange('2026-09-01','2026-09-23'),{from_date:'2026-09-01T00:00:00.000Z',to_date:'2026-09-24T00:00:00.000Z'});
   for(const [from,to] of [['2026-02-30','2026-03-01'],['2026-10-01','2026-09-01'],['2020-01-01','2026-01-01'],['bad','2026-01-01']]) assert.throws(()=>usageRange(from,to));

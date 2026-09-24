@@ -5,6 +5,7 @@ import { initInk, paintStrokes } from './ink.js';
 import { initUsage } from './usage.js';
 import { initPreferences } from './preferences.js';
 import { initLocalFiles } from './local-files.js';
+import { confidenceLabel } from '../lib/confidence.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -111,7 +112,7 @@ async function showItem(item) {
   $('#demo-tag').hidden = !item.demo; $('#saved').textContent = '已保存到本机';
   $('#raw').textContent = JSON.stringify(item.raw || { mode: item.demo ? 'demo' : 'local', note: item.demo ? '预置示例，不含真实 API 响应或置信度。' : '尚无 API 返回数据。' }, null, 2);
   $('#char-count').textContent = (item.mmd || '').length.toLocaleString() + ' 字符';
-  $('#confidence').innerHTML = '<span class="dot"></span>' + (item.demo ? '演示内容 · 无真实置信度' : item.editedAt ? '已人工编辑 · OCR 置信度仅适用于原始结果' : typeof item.confidence === 'number' ? '识别置信度 ' + (item.confidence * 100).toFixed(1) + '%' : item.status === 'completed' ? '已保存' : '等待识别');
+  updateConfidence(item);
   $('#recognize').disabled = state.busy || pdfActive(item) || item.demo || item.kind === 'text' || item.status === 'completed';
   $('#recognize').innerHTML = icon(item.pdfId ? 'refresh-cw' : 'scan-text') + (item.pdfId ? '继续查询' : '开始识别');
   $('#delete').disabled = state.busy; $('#crop').hidden = item.kind !== 'image' || item.demo;
@@ -122,6 +123,10 @@ async function showItem(item) {
   if (!item.pdfTask && (item.word || (item.wordRequested && item.status === 'completed'))) watchWord(item.id).catch(showError);
   updatePdfPanel();
   updateDesktopControls();
+}
+function updateConfidence(item) {
+  $('#confidence').innerHTML = '<span class="dot"></span>' + confidenceLabel(item);
+  $('#confidence').title = 'Mathpix 对原始识别结果完全正确的估计概率，不代表人工校验后的准确率。';
 }
 function updateDesktopControls() {
   const active = pdfActive(state.current) || (desktopState?.busy && desktopState.itemId === state.current?.id);
@@ -280,7 +285,7 @@ function saveCurrent() {
       const updated = await api('/items/' + id, { method:'PATCH', body:{ mmd, title } });
       if (state.current?.id === id && !state.dirty) {
         state.current = { ...updated }; $('#saved').textContent = '已保存到本机';
-        $('#confidence').innerHTML = '<span class="dot"></span>' + (updated.demo ? '演示内容 · 无真实置信度' : '已人工编辑');
+        updateConfidence(updated);
       }
       await refreshHistory();
     } catch (e) { if (state.current?.id === id) { state.dirty = true; $('#saved').textContent = '保存失败，请重试'; } throw e; }

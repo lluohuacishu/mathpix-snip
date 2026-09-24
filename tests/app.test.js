@@ -46,7 +46,7 @@ function mockApi({ text = mmd, formatStatus = () => 'completed', failConvert = f
   const calls = [];
   return { calls, fetchImpl: async (url, opts) => {
     calls.push({ url, opts });
-    if (url.endsWith('/v3/text')) return json({ text, confidence_rate: 0.94, request_id: 'mock-image' });
+    if (url.endsWith('/v3/text')) return json({ text, confidence:0.67, confidence_rate: 0.94, request_id: 'mock-image' });
     if (url.endsWith('/v3/pdf') && opts.method === 'POST') return json({ pdf_id: 'mock-pdf' });
     if (url.endsWith('/v3/converter') && opts.method === 'POST') {
       if (failConvert) throw new Error('offline');
@@ -87,7 +87,7 @@ test('image OCR automatically prepares official Word from unchanged MMD without 
   const i = await importItem(f);
   assert.equal(mock.calls.length, 0, 'Import alone must not upload');
   const recognized = await (await f.req('/recognize/' + i.id, 'POST', {})).json();
-  assert.equal(recognized.status, 'completed'); assert.equal(recognized.confidence, 0.94);
+  assert.equal(recognized.status, 'completed'); assert.equal(recognized.confidence, 0.67);
   const done = await f.waitWord(i.id);
   assert.equal(done.mmd, mmd); assert.equal(done.wordRequested, true);
   assert.equal(count(mock, '/v3/text'), 1); assert.equal(count(mock, '/v3/converter', 'POST'), 1);

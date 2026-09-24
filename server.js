@@ -20,6 +20,7 @@ import { UsageStats } from './lib/usage.js';
 import { Preferences } from './lib/preferences.js';
 import { checkCredentials } from './lib/credential-check.js';
 import { LocalFiles } from './lib/local-files.js';
+import { overallConfidence } from './lib/confidence.js';
 
 const require = createRequire(import.meta.url);
 const { MathpixMarkdownModel: MM } = require('mathpix-markdown-it');
@@ -165,7 +166,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
       if (i.kind === 'image') {
         const result = await client.image(i.source);
         i.raw = result; i.mmd = result.text || (result.latex_styled ? '$$' + result.latex_styled + '$$' : '');
-        i.confidence = result.confidence_rate ?? result.confidence;
+        i.confidence = overallConfidence(result);
         i.status = 'completed';
         if (!i.mmd) throw new ApiError('未识别到文字或公式，请检查原图。', 422);
       } else {

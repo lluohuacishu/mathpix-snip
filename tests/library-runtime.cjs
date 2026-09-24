@@ -15,7 +15,7 @@ async function run(){
   await writeFile(path.join(folder,'images','plot.png'),'image');await writeFile(path.join(directory,'旧版 Word.docx'),'original-word');await writeFile(path.join(directory,'已存在.docx'),'keep');
   service=await createApp({dataDir,wordDirectory:directory,testCredentials:{appId:'',appKey:''},openFolder:async file=>opened.push(file),openWord:async file=>opened.push(file),fetchImpl:async()=>{throw new Error('Unexpected remote call');}});
   await service.store.put({id:'calculus',title:'积分讲义',kind:'pdf',createdAt:'2026-01-02T00:00:00Z',mmd:'## 积分讲义\n\n$$\\int x\\,dx=\\frac{x^2}{2}+C$$',status:'completed',pdfTask:{mode:'files',status:'completed',folder,stem:'积分讲义',outputDirectory:directory,artifacts}});
-  await service.store.put({id:'formula',title:'常用公式',kind:'text',createdAt:'2026-01-03T00:00:00Z',mmd:'## 常用公式\n\n$$a^2+b^2=c^2$$',status:'completed'});
+  await service.store.put({id:'formula',title:'常用公式',kind:'text',createdAt:'2026-01-03T00:00:00Z',mmd:'## 常用公式\n\n$$a^2+b^2=c^2$$',status:'completed',inkMode:'strokes',confidence:0.999,raw:{confidence:0.41,confidence_rate:0.999}});
   server=service.app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   main=new BrowserWindow({width:1400,height:1000,show:false,webPreferences:{offscreen:true,sandbox:true,contextIsolation:true,nodeIntegration:false,backgroundThrottling:false}});
   main.webContents.on('console-message',(...args)=>{const d=args.find(a=>a&&typeof a==='object'&&'message'in a);if(d?.level==='error')errors.push(d.message);});
@@ -25,6 +25,7 @@ async function run(){
   const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const input=(selector,value)=>evaluate(`{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));}`);
   await until('document.querySelector("#title").value==="常用公式" && !document.querySelector("#rename-record").disabled');
+  assert.equal(await evaluate('document.querySelector("#confidence").textContent'),'Mathpix 整体置信度 41.0%');
   await click('#favorite');await until('document.querySelector("#favorite").getAttribute("aria-pressed")==="true" && !document.querySelector("#favorite").disabled');
   await click('.history-star[data-id="calculus"]');await until('document.querySelector("#favorites-count").textContent==="2"');
   assert.equal(await evaluate('document.querySelector("#title").value'),'常用公式');
@@ -36,6 +37,7 @@ async function run(){
   await new Promise(resolve=>{main.webContents.once('did-finish-load',resolve);main.reload();});
   await until('document.querySelector("#history-favorites").getAttribute("aria-pressed")==="true" && document.querySelectorAll(".history-item").length===1');
   await click('.history-item[data-id="calculus"]');await until('document.querySelector("#title").value==="积分讲义" && !document.querySelector("#rename-record").disabled');
+  assert.equal(await evaluate('document.querySelector("#confidence").textContent'),'Mathpix 未提供整体置信度');
   await click('#rename-record');await until('document.querySelector("#rename-dialog").open');await input('#rename-name','高数复习资料');await evaluate('document.querySelector("#rename-form").requestSubmit()');
   await until('!document.querySelector("#rename-dialog").open && document.querySelector("#title").value==="高数复习资料"');
   assert.equal((await service.store.get('calculus')).favorite,true);assert.equal((await service.store.get('calculus')).pdfTask.folder,folder);
