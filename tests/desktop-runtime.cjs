@@ -26,6 +26,8 @@ const openedWords = [], openedFolders = [], fakeDocx = Buffer.from('PK\x03\x04sy
 let failOpenFolder = false;
 const pdfSubmissions = [];
 const errors = [];
+const activeKeys = new Map(), usageProbes = [];
+let usageProbeStatus = 200;
 const json = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 const mmd = '隐藏窗口集成验证：$x^2+y^2=r^2$';
 async function run() {
@@ -33,6 +35,7 @@ async function run() {
   const zip = new yazl.ZipFile(); zip.addBuffer(Buffer.from('# Plain Markdown\n\n$x^2$'),'result.md');
   const chunks = []; const zipped = new Promise(resolve => zip.outputStream.on('data',c => chunks.push(c)).on('end',() => resolve(Buffer.concat(chunks)))); zip.end(); const archive = await zipped;
   service = await createApp({ dataDir, pdfOptions:{pollMs:50,maxPolls:100}, wordDirectory:path.join(dataDir,'exports'), openFolder:async folder => { if (failOpenFolder) throw new Error('测试资源管理器失败'); openedFolders.push(folder); }, openWord:async file => { assert.deepEqual(readFileSync(file),fakeDocx); openedWords.push(file); }, testCredentials: { appId:'desktop-test', appKey:'fake-key-never-sent' }, wordOptions: { pollMs:20 }, fetchImpl: async (url, options) => {
+    if (url.includes('/v3/ocr-usage?')) { usageProbes.push(options.headers); return new Response(JSON.stringify({ocr_usage:[]}),{status:usageProbeStatus}); }
     if (options.method === 'POST' && (url.endsWith('/files/v1') || url.endsWith('/v3/pdf'))) {
       pdfSubmissions.push({url,options:JSON.parse(options.body.get('options_json'))});
       return json(url.endsWith('/files/v1') ? {file_id:'ui-files'} : {pdf_id:'ui-fast'});
@@ -65,10 +68,12 @@ async function run() {
     return win;
   }
   const source = nativeImage.createFromBitmap(Buffer.alloc(640 * 400 * 4, 255), { width:640, height:400 });
+  const chosenDirectory = path.join(dataDir,'selected folder');
   const testElectron = { ...electron, BrowserWindow:HiddenWindow, Tray:FakeTray,
+    dialog: { ...electron.dialog, showOpenDialog:async()=>({canceled:false,filePaths:[chosenDirectory]}) },
     globalShortcut: {
-      register: (key, fn) => { assert.equal(key, 'Alt+Shift+Q'); hotkeyCallback = fn; registered = ++registerAttempts > 1; return registered; },
-      isRegistered: () => registered, unregisterAll: () => { registered = false; },
+      register: (key, fn) => { registerAttempts++; if(registerAttempts===1||key==='Ctrl+Q')return false; activeKeys.set(key,fn);hotkeyCallback=fn; registered=true;return true; },
+      isRegistered: key => activeKeys.has(key), unregister:key=>activeKeys.delete(key), unregisterAll: () => { activeKeys.clear();registered=false; },
     },
     desktopCapturer: { getSources: async () => { counts.screenshot++; return [{ display_id:String(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id), thumbnail:source }]; } },
   };
@@ -197,8 +202,36 @@ async function run() {
   errors.length = 0;
   assert.equal(pdfSubmissions.length,2);
   assert.equal(pdfSubmissions[0].url.endsWith('/files/v1'),true);assert.equal(pdfSubmissions[1].url.endsWith('/v3/pdf'),true);
+  await evalMain('document.querySelector("#settings-side").click()');
+  await until(()=>evalMain('document.querySelector("#settings-dialog").open && !document.querySelector("#output-save").disabled'),'general preferences loaded');
+  assert.equal(await evalMain('document.querySelector("#general-settings").hidden'),false);
+  await evalMain('document.querySelector("#shortcut-ctrl").checked=true;document.querySelector("#shortcut-alt").checked=true;document.querySelector("#shortcut-shift").checked=false;document.querySelector("#shortcut-key").value="J";document.querySelector("#shortcut-save").click()');
+  await until(async()=>(await getState()).hotkey==='Ctrl+Alt+J','new hotkey applied');
+  assert.equal(activeKeys.has('Alt+Shift+Q'),false);assert.equal(activeKeys.has('Ctrl+Alt+J'),true);
+  assert.equal(JSON.parse(readFileSync(path.join(dataDir,'desktop-shortcut.json'),'utf8')).hotkey,'Ctrl+Alt+J');
+  await until(()=>evalMain('document.querySelector("#capture kbd").textContent==="Ctrl + Alt + J"'),'hotkey hints updated');
+  await evalMain('document.querySelector("#shortcut-alt").checked=false;document.querySelector("#shortcut-key").value="Q";document.querySelector("#shortcut-save").click()');
+  await until(()=>evalMain('document.querySelector("#shortcut-status").textContent.includes("占用")'),'shortcut conflict feedback');assert.equal(activeKeys.has('Ctrl+Alt+J'),true);
+  await evalMain('document.querySelector("#choose-output").click()');
+  await until(()=>evalMain('document.querySelector("#output-directory").value.endsWith("selected folder")'),'native folder chooser');
+  await evalMain('document.querySelector("#auto-open-word").checked=false;document.querySelector("#output-save").click()');
+  await until(()=>evalMain('document.querySelector("#output-status").textContent.includes("已保存")'),'export settings saved');
+  assert.equal(service.preferences.value.outputDirectory,chosenDirectory);assert.equal(service.preferences.value.autoOpenWord,false);
+  await evalMain('document.querySelector("#settings-api-tab").click();document.querySelector("#app-id").value="test-candidate";document.querySelector("#app-key").value="fake-candidate";document.querySelector("#check-key").click()');
+  await until(()=>evalMain('document.querySelector("#key-check-status").textContent.includes("验证通过")'),'credential success feedback');
+  assert.equal(usageProbes.length,1);assert.equal(usageProbes[0].app_key,'fake-candidate');assert.notEqual(service.credentials.value.appKey,'fake-candidate');
+  await evalMain('document.querySelector("#app-key").dispatchEvent(new Event("input",{bubbles:true}))');assert.equal(await evalMain('document.querySelector("#key-check-status").textContent'),'');
+  usageProbeStatus=401;await evalMain('document.querySelector("#check-key").click()');
+  await until(()=>evalMain('document.querySelector("#key-check-status").textContent.includes("认证失败")'),'credential error feedback');
+  // Capture only the isolated renderer; no physical screen is read or shown.
+  await delay(250);
+  require('node:fs').writeFileSync(path.join(dataDir,'api-settings.png'),(await main.webContents.capturePage()).toPNG());
+  await evalMain('document.querySelector("#settings-general-tab").click()');
+  await delay(250);
+  require('node:fs').writeFileSync(path.join(dataDir,'general-settings.png'),(await main.webContents.capturePage()).toPNG());
+  await evalMain('document.querySelector("#settings-dialog .close").click()');await until(()=>evalMain('document.querySelector("#app-key").value===""'),'closing settings clears unsaved secret');
   assert.equal(BrowserWindow.getAllWindows().every(w => !w.isVisible()), true);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result:'PASS', checks:['hotkey conflict recovery','Escape cancellation without upload','close to tray','background hotkey callback','reverse drag and DPI crop','release does not submit','move and resize selection','Enter and button confirmation','reset and empty Enter','processing and automatic result UI','single OCR submission','official Word cache','fixed-directory export and open','preserve same-name files','save pending edits','error record preserved','missing key stays local','PDF drop and mode selection','page validation and cost estimates','three PDF outputs saved automatically','no visible windows'], counts }));
+  console.log(JSON.stringify({ result:'PASS', checks:['hotkey conflict recovery','Escape cancellation without upload','close to tray','background hotkey callback','reverse drag and DPI crop','release does not submit','move and resize selection','Enter and button confirmation','reset and empty Enter','processing and automatic result UI','single OCR submission','official Word cache','fixed-directory export and open','preserve same-name files','save pending edits','error record preserved','missing key stays local','PDF drop and mode selection','page validation and cost estimates','three PDF outputs saved automatically','custom shortcut and conflict rollback','folder picker and preferences','unsaved key validation and input invalidation','no visible windows'], counts, dataDir }));
 }
 run().then(async () => { await service.pdf.close(); await service.word.close(); server.closeAllConnections(); server.close(); app.exit(0); }).catch(async error => { console.error(error.stack); await service?.pdf.close(); await service?.word.close(); server?.closeAllConnections(); server?.close(); app.exit(1); });

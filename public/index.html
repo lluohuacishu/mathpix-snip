@@ -21,7 +21,7 @@
   <div class="sidebar-bottom">
     <button id="demo"><i data-lucide="sparkles"></i>打开演示示例<span>DEMO</span></button>
     <button id="new-text"><i data-lucide="file-pen-line"></i>新建公式笔记</button>
-    <button id="settings-side"><i data-lucide="settings-2"></i>API 设置<i data-lucide="chevron-right"></i></button>
+    <button id="settings-side"><i data-lucide="settings-2"></i>设置<i data-lucide="chevron-right"></i></button>
     <div class="local-note"><span class="dot"></span>记录保存在这台电脑上</div>
   </div>
 </aside>
@@ -64,7 +64,7 @@
       <textarea id="editor" spellcheck="false" aria-label="LaTeX 和 Markdown 源码" placeholder="识别结果会出现在这里。也可以直接输入文字和 $LaTeX$ 公式…" disabled></textarea>
       <footer class="document-footer"><span id="confidence"><span class="dot"></span>就绪</span><span id="char-count">0 字符</span><span class="footer-right" id="word-status">默认生成官方 Word</span></footer>
     </section>
-    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.6.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
+    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.7.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
   </div>
 </main>
 <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" hidden>
@@ -74,19 +74,34 @@
   <div class="modal-heading"><span class="modal-icon"><i data-lucide="scan-text"></i></span><button class="icon-button close" aria-label="稍后配置"><i data-lucide="x"></i></button></div>
   <h2 id="welcome-heading">欢迎使用 Math Snip</h2>
   <p class="subtle">截取题目，复制公式，导出 Word。</p>
-  <ol class="help-steps"><li><strong>连接你的 Mathpix API</strong><p>填写自己的 App ID 和 App Key。识别与转换按 Mathpix 的规则计费。</p></li><li><strong>按 Alt + Shift + Q 截图</strong><p>调整选框后按 Enter 确认，也可以拖入图片或 PDF。</p></li><li><strong>校对并导出</strong><p>点击公式复制 LaTeX，Word 保存到文档目录中的 Mathsnip 文件夹。</p></li></ol>
+  <ol class="help-steps"><li><strong>连接你的 Mathpix API</strong><p>填写自己的 App ID 和 App Key。识别与转换按 Mathpix 的规则计费。</p></li><li><strong>按 <span data-hotkey-label>Alt + Shift + Q</span> 截图</strong><p>调整选框后按 Enter 确认，也可以拖入图片或 PDF。</p></li><li><strong>校对并导出</strong><p>点击公式复制 LaTeX，Word 保存到文档目录中的 Mathsnip 文件夹。</p></li></ol>
   <div class="modal-footer"><button class="outline" id="welcome-demo">先体验演示</button><button class="primary" id="welcome-configure">配置 API<i data-lucide="arrow-right"></i></button></div>
 </dialog>
 <dialog id="settings-dialog">
-  <form id="settings-form">
-    <div class="modal-heading"><span class="modal-icon"><i data-lucide="key-round"></i></span><button type="button" class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
-    <h2>连接你的 Mathpix API</h2><p class="subtle">在这里填写凭据，用于识别和官方 Word 转换。尚未配置时可先体验演示、编辑和复制公式。</p>
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="settings-2"></i></span><button type="button" class="icon-button close" aria-label="关闭设置"><i data-lucide="x"></i></button></div>
+  <h2>设置</h2>
+  <div class="settings-tabs" role="tablist" aria-label="设置分类"><button id="settings-general-tab" role="tab" aria-selected="false" aria-controls="general-settings">常规设置</button><button id="settings-api-tab" role="tab" aria-selected="true" aria-controls="settings-form">Mathpix API</button></div>
+  <div id="general-settings" role="tabpanel" aria-labelledby="settings-general-tab" hidden>
+    <form id="shortcut-form" class="settings-section">
+      <h3>截图快捷键</h3><p class="micro">选择修饰键和主键。至少包含 Ctrl、Alt 或 Win。</p>
+      <fieldset id="shortcut-fields"><legend class="sr-only">快捷键组合</legend><div class="shortcut-options"><label class="check-label"><input type="checkbox" id="shortcut-ctrl">Ctrl</label><label class="check-label"><input type="checkbox" id="shortcut-alt">Alt</label><label class="check-label"><input type="checkbox" id="shortcut-shift">Shift</label><label class="check-label"><input type="checkbox" id="shortcut-super">Win</label><select id="shortcut-key" aria-label="快捷键主键"></select></div></fieldset>
+      <p id="shortcut-status" class="feature-status" role="status"></p><div class="settings-actions"><button type="button" id="shortcut-reset" class="text-button">恢复默认组合</button><button type="submit" id="shortcut-save" class="outline">应用快捷键</button></div>
+    </form>
+    <form id="output-form" class="settings-section">
+      <h3>文件保存</h3><fieldset id="output-fields"><legend class="sr-only">导出选项</legend><label for="output-directory">导出文件夹</label><div class="directory-field"><input id="output-directory" autocomplete="off" spellcheck="false" required placeholder="选择文件夹或输入完整路径"><button type="button" id="choose-output" class="outline">浏览…</button></div>
+      <label class="check-label"><input type="checkbox" id="auto-open-word">保存完成后自动打开 Word</label></fieldset>
+      <p id="output-status" class="feature-status" role="status"></p><div class="settings-actions"><button type="button" id="output-reset" class="text-button">恢复默认目录</button><button type="submit" id="output-save" class="primary">保存导出设置</button></div>
+    </form>
+  </div>
+  <form id="settings-form" role="tabpanel" aria-labelledby="settings-api-tab">
+    <p class="subtle">连接自己的 Mathpix API，用于识别和官方 Word 转换。尚未配置时可先体验演示。</p>
     <label>App ID<input id="app-id" autocomplete="off" placeholder="在 Mathpix 控制台查看" required></label>
     <label>App Key<div class="password-field"><input id="app-key" type="password" autocomplete="new-password" placeholder="输入你的 API 密钥"><button id="show-key" type="button" class="icon-button" aria-label="显示或隐藏密钥"><i data-lucide="eye"></i></button></div></label>
     <label class="check-label"><input type="checkbox" id="remember">在这台电脑上记住密钥</label><p class="micro">勾选后使用 Windows 当前用户加密保存；不勾选则仅在服务本次运行期间有效。</p>
     <div class="settings-links"><a href="https://console.mathpix.com/" target="_blank" rel="noreferrer">获取 API 凭据 ↗</a><a href="https://mathpix.com/pricing/api" target="_blank" rel="noreferrer">查看 API 价格 ↗</a></div>
     <div class="inline-error" id="settings-error" hidden></div>
-    <div class="modal-footer"><button type="button" id="clear-key" class="text-button">清除本机密钥</button><button class="primary" type="submit">保存设置<i data-lucide="check"></i></button></div>
+    <div class="key-validation"><button type="button" id="check-key" class="outline"><i data-lucide="shield-check"></i>验证密钥</button><p class="micro">仅查询官方用量，不提交识别或转换任务。验证当前填写的凭据，不会自动保存；App ID 未变时，Key 留空可验证已保存的密钥。</p></div><p id="key-check-status" class="feature-status" role="status"></p>
+    <div class="modal-footer"><button type="button" id="clear-key" class="text-button">清除本机密钥</button><button class="primary" type="submit">保存 API 设置<i data-lucide="check"></i></button></div>
   </form>
 </dialog>
 <dialog id="ink-dialog" class="feature-dialog" aria-labelledby="ink-heading">
@@ -119,7 +134,7 @@
 </dialog>
 <dialog id="export-dialog">
   <div class="modal-heading"><span class="modal-icon"><i data-lucide="file-down"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
-  <h2>保存并打开 Word 文档</h2><p class="subtle">识别时默认准备官方 DOCX。保存成功后用默认的 Word / WPS 打开，无需选择目录。</p>
+  <h2>保存 Word 文档</h2><p class="subtle">识别时默认准备官方 DOCX。按设置中的目录保存；可选择保存后自动用 Word / WPS 打开。</p>
   <p class="micro">保存位置：<span id="export-location"></span><br>按记录标题命名，同名文件自动加序号。公式可在 Word 中继续编辑；修改正文后会重新进行官方转换。</p>
   <div id="export-status" class="subtle" role="status"></div>
   <div class="modal-footer"><button class="outline close">关闭</button><button id="export-cloud" class="primary" hidden>重试 / 继续保存</button></div>
@@ -130,15 +145,15 @@
   <label>转换模式<select id="pdf-mode"><option value="files">经济模式 · Files API · $0.0015 / 页起</option><option value="fast">快速模式 · v3/pdf · $0.005 / 页起</option></select></label>
   <p class="micro">经济模式等待通常较久；快速模式适合急用。仅调用你选择的接口，不会自动切换。</p>
   <label>识别页码<input id="pdf-pages" placeholder="留空表示全文，例如 1-3,5"></label><p id="pdf-estimate" class="micro" role="status"></p>
-  <p class="micro">三份文件统一保存到 <span id="pdf-save-location"></span> 下的独立文件夹。配套图片保留，完成后自动打开 Word。</p>
+  <p class="micro">三份文件统一保存到 <span id="pdf-save-location"></span> 下的独立文件夹。配套图片保留，是否自动打开 Word 由设置决定。</p>
   <div class="modal-footer"><button class="outline close">取消</button><button id="pdf-start" class="primary">开始转换<i data-lucide="arrow-right"></i></button></div>
 </dialog>
 <dialog id="help-dialog">
   <div class="modal-heading"><span class="modal-icon"><i data-lucide="lightbulb"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
   <h2>三步，把截图变成文档</h2>
-  <ol class="help-steps"><li><strong>截取或导入</strong><p>桌面版按 Alt + Shift + Q 框选，松开后可移动或缩放，按 Enter 或点“识别”提交并弹出结果。Esc 或右键取消。也可以拖入图片或 PDF。</p></li><li><strong>识别和校对</strong><p>普通导入或粘贴后点击“开始识别”。切换原图核对，直接修改下方源码。</p></li><li><strong>复制或导出</strong><p>点预览中的公式复制 LaTeX，或导出带可编辑公式的 DOCX。</p></li></ol>
-  <div class="help-tip">PDF 拖入后可选经济或快速模式；完成后自动保存 DOCX、普通 MD、原始 MMD 和配图到 Documents\Mathsnip 下的独立文件夹，并打开 Word。截图结果仍可点击“导出 Word”保存打开。</div>
-  <p class="micro">快捷键截图会自动上传选区到 Mathpix。关闭桌面窗口后仍在托盘运行；右键托盘图标可退出。多屏时截取鼠标所在屏幕。浏览器版可用 Win + Shift + S 截图，再 Ctrl + V 粘贴。历史包含原文件，保存在工程的 data/items 目录。</p>
+  <ol class="help-steps"><li><strong>截取或导入</strong><p>桌面版按 <span data-hotkey-label>Alt + Shift + Q</span> 框选，松开后可移动或缩放，按 Enter 或点“识别”提交并弹出结果。Esc 或右键取消。也可以拖入图片或 PDF。</p></li><li><strong>识别和校对</strong><p>普通导入或粘贴后点击“开始识别”。切换原图核对，直接修改下方源码。</p></li><li><strong>复制或导出</strong><p>点预览中的公式复制 LaTeX，或导出带可编辑公式的 DOCX。</p></li></ol>
+  <div class="help-tip">PDF 拖入后可选经济或快速模式；完成后自动保存 DOCX、普通 MD、原始 MMD 和配图到设置指定的目录下，是否自动打开 Word 可在设置中修改。截图结果仍可点击“导出 Word”保存打开。</div>
+  <p class="micro">快捷键截图会自动上传选区到 Mathpix。关闭桌面窗口后仍在托盘运行；右键托盘图标可退出。多屏时截取鼠标所在屏幕。浏览器版可用 Win + Shift + S 截图，再 Ctrl + V 粘贴。历史包含原文件，保存在应用的本机数据目录。</p>
 </dialog>
 <dialog id="delete-dialog"><h2>删除这条记录？</h2><p class="subtle">将删除本机保存的原文件和识别结果。此操作不会删除 Mathpix 云端记录。</p><div class="modal-footer"><button class="outline close">取消</button><button id="delete-confirm" class="danger">删除记录</button></div></dialog>
 <dialog id="crop-dialog"><div class="modal-heading"><h2>拖动选择识别区域</h2><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="crop-area"><canvas id="crop-canvas"></canvas></div><div class="modal-footer"><span class="micro">生成新记录，保留原图</span><button id="crop-confirm" class="primary">保存裁剪</button></div></dialog>

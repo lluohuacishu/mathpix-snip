@@ -60,6 +60,27 @@ test('page ranges reject invalid bounds and count overlap once', () => {
   assert.deepEqual(selectedPages('',8),{ranges:'',count:8});
   for (const pages of ['0','3-1','9','-1','1,,2','9999999999999999999']) assert.throws(() => selectedPages(pages,8));
 });
+test('new PDF jobs snapshot the selected directory; changing preferences does not split a running job or block opening old exports',async t=>{
+  const f=await fixture(t,{ready:false}), firstDirectory=path.join(f.dataDir,'chosen first'), secondDirectory=path.join(f.dataDir,'chosen second');
+  assert.equal((await f.req('/preferences','POST',{outputDirectory:firstDirectory,autoOpenWord:false})).status,200);
+  const first=await f.importPdf('first.pdf');await f.req('/pdf/'+first.id+'/start','POST',{mode:'files'});
+  assert.equal((await f.store.get(first.id)).pdfTask.outputDirectory,firstDirectory);
+  await f.req('/preferences','POST',{outputDirectory:secondDirectory,autoOpenWord:false});f.ready();
+  const complete=await f.done(first.id);assert.equal(complete.pdfTask.status,'completed');assert.equal(path.dirname(complete.pdfTask.folder),firstDirectory);
+  for(const artifact of Object.values(complete.pdfTask.artifacts))assert.equal(path.dirname(artifact.path),complete.pdfTask.folder);
+  assert.equal(f.opened.length,0);
+  assert.equal((await f.req('/pdf/'+first.id+'/open','POST',{kind:'folder'})).status,200);assert.equal(f.openedFolders[0],complete.pdfTask.folder);
+  const second=await f.importPdf('second.pdf');await f.req('/pdf/'+second.id+'/start','POST',{mode:'fast'});const next=await f.done(second.id);assert.equal(path.dirname(next.pdfTask.folder),secondDirectory);assert.equal(f.opened.length,0);
+});
+
+test('legacy PDF tasks retain their original default directory after preferences change',async t=>{
+  const f=await fixture(t,{ready:false}), item=await f.importPdf('legacy.pdf');
+  await f.req('/pdf/'+item.id+'/start','POST',{mode:'files'});
+  await f.pdf.update(item.id,current=>{delete current.pdfTask.outputDirectory;});
+  await f.req('/preferences','POST',{outputDirectory:path.join(f.dataDir,'new default'),autoOpenWord:false});f.ready();
+  const completed=await f.done(item.id);assert.equal(completed.pdfTask.status,'completed');assert.equal(path.dirname(completed.pdfTask.folder),path.join(f.dataDir,'output'));
+  assert.equal((await f.req('/pdf/'+item.id+'/open','POST',{kind:'folder'})).status,200);
+});
 for (const mode of ['files','fast']) test(mode+' PDF creates official DOCX, plain MD, exact raw MMD and offline assets from one submission',async t => {
   const f = await fixture(t,{pendingDownload:true}), item = await f.importPdf();
   assert.equal(item.numPages,2); assert.equal(item.source,undefined); assert.deepEqual(await readFile(f.store.sourcePath(item.id)),Buffer.from(f.pdfBytes));

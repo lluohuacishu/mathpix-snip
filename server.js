@@ -17,6 +17,8 @@ import { PDF_MAX_BYTES, PDF_RATES } from './lib/pdf-options.js';
 import { atomicWrite } from './lib/files.js';
 import { InkRecognition } from './lib/ink.js';
 import { UsageStats } from './lib/usage.js';
+import { Preferences } from './lib/preferences.js';
+import { checkCredentials } from './lib/credential-check.js';
 
 const require = createRequire(import.meta.url);
 const { MathpixMarkdownModel: MM } = require('mathpix-markdown-it');
@@ -26,6 +28,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
   await mkdir(dataDir, { recursive: true });
   const store = new Store(dataDir); await store.init();
   const credentials = new Credentials(root, dataDir, credentialCipher);
+  const preferences = new Preferences(dataDir, wordDirectory); await preferences.init();
   if (testCredentials) credentials.value = testCredentials; else await credentials.init();
   const client = new MathpixClient({ credentials: () => credentials.value, fetchImpl });
   const ink = new InkRecognition({store,client}), usage = new UsageStats(client);
@@ -50,7 +53,9 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
   });
   app.use(express.json({ limit: '40mb' }));
   app.get('/api/health', (req, res) => res.json({ app: 'mathpix-snip-local', version: require('./package.json').version, inkLayout: 2 }));
-  app.get('/api/bootstrap', (req, res) => res.json({ token, installed, settings: credentials.public(), nativeCapture: process.platform === 'win32', wordDirectory, pdfMode, pdfRates:PDF_RATES, pdfMaxBytes:PDF_MAX_BYTES }));
+  app.get('/api/bootstrap', (req, res) => res.json({ token, installed, settings: credentials.public(), preferences: preferences.public(), nativeCapture: process.platform === 'win32', wordDirectory: preferences.value.outputDirectory, pdfMode, pdfRates:PDF_RATES, pdfMaxBytes:PDF_MAX_BYTES }));
+  app.get('/api/preferences', (req, res) => res.json(preferences.public()));
+  app.post('/api/preferences', (req, res) => locked('preferences', async () => res.json(await preferences.set(req.body))));
   app.get('/api/items', async (req, res) => res.json(await store.list()));
   app.post('/api/ink/recognize',async(req,res)=>res.json(await ink.recognize(req.body)));
   app.post('/api/ink/:id/save',async(req,res)=>locked('ink-'+req.params.id,async()=>res.json(await ink.save(req.params.id))));
@@ -65,7 +70,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
   const word = new WordExports({ store, client, ...wordOptions, update: (id, fn) => locked(id, async () => {
     const item = await getItem(id); await fn(item); await store.put(item);
   }) });
-  const pdf = new PdfJobs({store,client,word,directory:wordDirectory,openWord,openFolder,...pdfOptions,update:(id,fn) => locked(id,async () => {
+  const pdf = new PdfJobs({store,client,word,directory:wordDirectory,getDirectory:()=>preferences.value.outputDirectory,autoOpenWord:()=>preferences.value.autoOpenWord,openWord,openFolder,...pdfOptions,update:(id,fn) => locked(id,async () => {
     const item = await getItem(id); await fn(item); await store.put(item);
   })});
   app.post('/api/pdf/import',express.raw({type:'application/pdf',limit:PDF_MAX_BYTES}),async (req,res) => {
@@ -128,6 +133,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
     res.json(i);
   });
   app.post('/api/settings', async (req, res) => res.json(await credentials.set(req.body)));
+  app.post('/api/settings/check', async (req, res) => res.json(await checkCredentials(credentials.resolve(req.body), fetchImpl)));
   app.delete('/api/settings', async (req, res) => { await credentials.clear(); res.json(credentials.public()); });
   app.post('/api/capture', (req, res) => {
     if (process.platform !== 'win32') throw new ApiError('请使用系统截图快捷键，然后回到这里粘贴。');
@@ -213,7 +219,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
       task = (async () => {
         const item = await getItem(id), buffer = await word.cached(item);
         if (!buffer) throw new ApiError('DOCX 尚未完成转换，请稍后重试。', 409);
-        try { return await saveAndOpenWord({ buffer, title:item.title, directory:wordDirectory, openFile:openWord }); }
+        try { return await saveAndOpenWord({ buffer, title:item.title, directory:preferences.value.outputDirectory, autoOpen:preferences.value.autoOpenWord, openFile:openWord }); }
         catch (error) { throw new ApiError(error.message, 500); }
       })();
       wordSaves.set(id, task);
@@ -235,7 +241,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
           item.word.hash === wordHash(item.mmd) && (item.conversionId || (item.pdfId && item.wordFromPdf))) word.start(item.id);
     }
   }
-  return { app, store, credentials, word, pdf };
+  return { app, store, credentials, word, pdf, preferences };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

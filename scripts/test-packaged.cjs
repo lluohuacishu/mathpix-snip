@@ -58,9 +58,14 @@ async function run(){
  const render=await request(first,'/render',{mmd:'中文公式 $x^2+1$'});assert.equal(render.status,200);assert.match((await render.json()).html,/mjx-container/);
  const saved=await request(first,'/settings',{appId:'fake-packaged-id',appKey:'fake-packaged-key',remember:true});assert.equal(saved.status,200);
  const encrypted=await readFile(path.join(dataDir,'credentials.safe'),'utf8');assert.ok(!encrypted.includes('fake-packaged'));
+ const hotkey=await first.evaluate('window.desktopCapture.setHotkey("Ctrl+Alt+Shift+F23")');assert.equal(hotkey.hotkey,'Ctrl+Alt+Shift+F23');
+ const outputDirectory=path.join(dataDir,'custom exports');
+ assert.equal((await request(first,'/preferences',{outputDirectory,autoOpenWord:false})).status,200);
  first.page.close();await stop();const second=await launch();assert.equal(second.boot.settings.configured,true,'Saved credentials must load after a normal exit');assert.equal(second.boot.settings.remember,true);assert.equal(second.boot.settings.appId,'fake-packaged-id');
+ assert.equal(second.boot.preferences.outputDirectory,outputDirectory);assert.equal(second.boot.preferences.autoOpenWord,false);
+ await until(second,'!!window.desktopCapture');const desktop=await second.evaluate('window.desktopCapture.getState()');assert.equal(desktop.hotkey,'Ctrl+Alt+Shift+F23');assert.equal(desktop.registered,true);
  await until(second,'document.querySelector("#mode")?.textContent.includes("API 已配置")');assert.equal(await second.evaluate('document.querySelector("#welcome-dialog").open'),false);second.page.close();
  await stop();blocker.close();blocker=null;
- console.log(JSON.stringify({result:'PASS',checks:['standalone executable','hidden startup','port collision fallback','built frontend and SVG','math rendering in ASAR','first-run demo and settings actions','native encrypted credentials survive restart','no Mathpix requests'],dataDir}));
+ console.log(JSON.stringify({result:'PASS',checks:['standalone executable','hidden startup','port collision fallback','built frontend and SVG','math rendering in ASAR','first-run demo and settings actions','native encrypted credentials survive restart','custom shortcut re-registers after restart','export preferences survive restart','no Mathpix requests'],dataDir}));
 }
 run().catch(e=>{console.error(e.stack);process.exitCode=1;}).finally(async()=>{await stop();blocker?.close();});

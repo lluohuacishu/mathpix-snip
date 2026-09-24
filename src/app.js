@@ -3,11 +3,13 @@ import { createIcons, icons } from 'lucide';
 import { selectedPages } from '../lib/pdf-options.js';
 import { initInk, paintStrokes } from './ink.js';
 import { initUsage } from './usage.js';
+import { initPreferences } from './preferences.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const state = { token: '', settings: {}, items: [], current: null, formulas: [], dirty: false, tab: 'preview', busy: false, showFormulas: true };
 let desktopState = null, desktopQueue = Promise.resolve();
+let preferencesUI, preferences = { autoOpenWord:true }, keyCheckRevision = 0;
 let pdfMode = 'files', pdfRates = {files:0.0015,fast:0.005}, pdfDialogId, outputDirectory = '', originalSeq = 0;
 const pdfActive = item => !!item?.pdfTask && ['submitting','processing','saving'].includes(item.pdfTask.status);
 let toastTimer, saveTimer, renderTimer, pollTimer, wordTimer, renderSeq = 0, savePromise = Promise.resolve(), sourceUrl;
@@ -34,10 +36,17 @@ function updateSettings() {
   $('#mode').innerHTML = '<span class="dot"></span>' + (state.settings.configured ? 'API 已配置' : '尚未配置 API');
   $('#mode').classList.toggle('connected', state.settings.configured);
 }
-function openSettings() {
+function openSettings(tab = 'api') {
   $('#app-id').value = state.settings.appId || ''; $('#app-key').value = '';
   $('#app-key').placeholder = state.settings.configured ? state.settings.keyHint + ' · 留空保留现有密钥' : '输入你的 API 密钥';
-  $('#remember').checked = !!state.settings.remember; $('#settings-error').hidden = true; modal('#settings-dialog');
+  $('#app-key').type = 'password';
+  $('#remember').checked = !!state.settings.remember; $('#settings-error').hidden = true;
+  ++keyCheckRevision; $('#key-check-status').textContent = ''; preferencesUI.open(tab);
+}
+function updatePreferences(value) {
+  preferences = value; outputDirectory = value.outputDirectory;
+  $('#export-location').textContent = outputDirectory;
+  $('#pdf-save-location').textContent = outputDirectory;
 }
 function notice(message, error = false) {
   $('#notice > span').textContent = message; $('#notice').classList.toggle('error', error);
@@ -50,7 +59,7 @@ function updateNotice() {
     const task = i.pdfTask;
     if (task.error) return notice(task.error + ' 已成功生成的文件会保留。',true);
     if (task.status === 'completed') return notice('PDF 三份文件已保存：DOCX、普通 Markdown、原始 MMD。' + (task.openError || ''),!!task.openError);
-    return notice('PDF 正在后台处理，关闭窗口后仍会继续。完成后自动保存三份文件并打开 Word。');
+    return notice('PDF 正在后台处理，关闭窗口后仍会继续。完成后按设置保存三份文件。');
   }
   if (i.error) return notice(i.error, true);
   if (i.demo) return notice('演示示例 · 内容为预置文本，未调用 OCR。可体验编辑和复制公式；导出 Word 需要连接官方 API。');
@@ -155,7 +164,10 @@ function desktopChanged(next) {
     if (desktopState && next.revision <= desktopState.revision) return;
     desktopState = next;
     const note = $('#desktop-note'); note.hidden = false;
-    note.textContent = next.detail || (next.registered ? 'Alt + Shift + Q：框选后可调整，Enter 确认识别 · 关闭窗口后仍在托盘运行 · Esc 取消截图' : '快捷键被占用，关闭冲突程序后会自动恢复。');
+    const hotkey = (next.hotkey || 'Alt+Shift+Q').replace('Super','Win').split('+').join(' + ');
+    $('#capture kbd').textContent = hotkey;
+    document.querySelectorAll('[data-hotkey-label]').forEach(node=>{node.textContent=hotkey;});
+    note.textContent = next.detail || (next.registered ? hotkey + '：框选后可调整，Enter 确认识别 · 关闭窗口后仍在托盘运行 · Esc 取消截图' : '快捷键被占用，可在设置中修改，或关闭冲突程序后自动恢复。');
     note.classList.toggle('error', next.phase === 'error' || !next.registered);
     updateDesktopControls();
     if (next.itemId) {
@@ -330,13 +342,13 @@ async function exportCloud() {
       const result = await api('/export/cloud/' + id + '/status');
       if (result.status === 'error') throw new Error(result.error || 'Mathpix DOCX 转换失败，请检查内容后重试。');
       if (result.status === 'completed') {
-        $('#export-status').textContent = '正在保存 Word，并用默认程序打开…';
+        $('#export-status').textContent = preferences.autoOpenWord ? '正在保存 Word，并用默认程序打开…' : '正在保存 Word…';
         const saved = await api('/export/cloud/' + id + '/save', { method:'POST', body:{} });
         if (state.current?.id === id) { $('#word-status').textContent = saved.opened ? 'Word 已保存并打开' : 'Word 已保存'; $('#word-status').title = saved.path; }
-        if (!saved.opened) throw new Error(saved.error + '\n文件位置：' + saved.path);
-        $('#export-dialog').close(); toast('Word 已保存并打开：' + saved.path); return;
+        if (saved.error) throw new Error(saved.error + '\n文件位置：' + saved.path);
+        $('#export-dialog').close(); toast((saved.opened ? 'Word 已保存并打开：' : 'Word 已保存：') + saved.path); return;
       }
-      $('#export-status').textContent = 'Mathpix 正在生成 DOCX… 完成后保存并打开。关闭此窗口不会中止后台准备。';
+      $('#export-status').textContent = 'Mathpix 正在生成 DOCX… 完成后按导出设置保存。关闭此窗口不会中止后台准备。';
       await new Promise(r => setTimeout(r,2000));
     }
     throw new Error('转换仍在进行。稍后再点击“导出 Word”即可继续查询已有任务。');
@@ -362,6 +374,8 @@ async function init() {
   const boot = await api('/bootstrap'); state.token = boot.token; state.settings = boot.settings; updateSettings();
   pdfMode = boot.pdfMode || 'files'; pdfRates = boot.pdfRates || pdfRates; outputDirectory = boot.wordDirectory;
   $('#export-location').textContent = boot.wordDirectory || '当前用户的 Documents/Mathsnip';
+  preferencesUI = initPreferences({ api, changed:updatePreferences });
+  if (boot.preferences) updatePreferences(boot.preferences);
   $$('.close').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
   on('#welcome-configure','click',() => { $('#welcome-dialog').close(); openSettings(); });
   on('#welcome-demo','click',() => $('#welcome-dialog').close());
@@ -369,7 +383,8 @@ async function init() {
   initInk({api,copy,saveCurrent,openItem:async item=>{await saveCurrent();await refreshHistory();await showItem(item);}});
   initUsage({api});
   $$('[data-tab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
-  ['#settings-side','#mode','#notice-action'].forEach(s => on(s,'click',openSettings));
+  on('#settings-side','click',()=>openSettings('general'));
+  ['#mode','#notice-action'].forEach(s => on(s,'click',()=>openSettings()));
   ['#import','#import-side'].forEach(s => on(s,'click',() => $('#file').click()));
   on('#pdf-import','click',() => $('#pdf-file').click());
   on('#pdf-file','change',async e => { try { await importFile(e.target.files[0]); } finally { e.target.value = ''; } });
@@ -405,9 +420,18 @@ async function init() {
   on('#show-key','click',() => { $('#app-key').type = $('#app-key').type === 'password' ? 'text' : 'password'; });
   on('#settings-form','submit',async e => {
     e.preventDefault(); const button = $('#settings-form button[type="submit"]'); button.disabled = true;
-    try { state.settings = await api('/settings',{ method:'POST',body:{ appId:$('#app-id').value, appKey:$('#app-key').value, remember:$('#remember').checked } }); $('#app-key').value = ''; $('#settings-dialog').close(); updateSettings(); updateNotice(); toast('设置已保存；首次识别时会验证密钥'); }
+    try { state.settings = await api('/settings',{ method:'POST',body:{ appId:$('#app-id').value, appKey:$('#app-key').value, remember:$('#remember').checked } }); $('#app-key').value = ''; $('#settings-dialog').close(); updateSettings(); updateNotice(); toast('API 设置已保存'); }
     catch (err) { $('#settings-error').hidden = false; $('#settings-error').textContent = err.message; }
     finally { button.disabled = false; }
+  });
+  ['#app-id','#app-key'].forEach(selector=>on(selector,'input',()=>{ ++keyCheckRevision; $('#key-check-status').textContent=''; }));
+  $('#settings-dialog').addEventListener('close',()=>{ ++keyCheckRevision; $('#app-key').value=''; });
+  on('#check-key','click',async()=>{
+    const revision=++keyCheckRevision, button=$('#check-key'), status=$('#key-check-status');
+    button.disabled=true; status.textContent='正在验证…'; status.classList.remove('error');
+    try { const result=await api('/settings/check',{method:'POST',body:{appId:$('#app-id').value,appKey:$('#app-key').value}}); if(revision!==keyCheckRevision)return; status.textContent=result.message; status.classList.toggle('error',result.status!=='valid'); }
+    catch(error){ if(revision===keyCheckRevision){status.textContent=error.message;status.classList.add('error');} }
+    finally { button.disabled=false; }
   });
   on('#clear-key','click',async () => { state.settings = await api('/settings',{ method:'DELETE' }); $('#app-key').value = ''; $('#app-id').value = ''; $('#remember').checked = false; updateSettings(); updateNotice(); toast('已清除本机密钥'); $('#settings-dialog').close(); });
   on('#delete','click',() => { if (state.current) modal('#delete-dialog'); });
@@ -451,7 +475,6 @@ async function init() {
   await refreshHistory();
   if (state.items.length) await selectItem(state.items[0].id); else await loadDemo();
   if (window.desktopCapture) {
-    $('#capture kbd').textContent = 'Alt ⇧ Q';
     window.desktopCapture.onState(desktopChanged);
     await desktopChanged(await window.desktopCapture.getState());
   }

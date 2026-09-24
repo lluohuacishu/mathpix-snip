@@ -3,9 +3,11 @@ const path = require('node:path');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const { pixelRect, processCapture } = require('./capture-core.cjs');
+const { DEFAULT_HOTKEY, normalizeHotkey, HotkeyController } = require('./hotkey.cjs');
+const { readFile } = require('node:fs/promises');
 const root = path.dirname(__dirname), VERSION = require('../package.json').version;
 let PORT = Number(process.env.SNIP_PORT || 47831), BASE = 'http://127.0.0.1:' + PORT + '/';
-const HOTKEY = 'Alt+Shift+Q', RELEASES = 'https://github.com/lluohuacishu/mathpix-snip/releases/latest';
+const RELEASES = 'https://github.com/lluohuacishu/mathpix-snip/releases/latest';
 const background = process.argv.includes('--background');
 const dataDir = process.env.SNIP_DATA_DIR || (app.isPackaged ? path.join(app.getPath('appData'), 'Math Snip') : path.join(root, 'data'));
 const profile = path.join(dataDir, 'desktop-shell');
@@ -14,7 +16,9 @@ app.setPath('userData', profile);
 app.setName('Math Snip');
 app.setAppUserModelId('com.mathsnip.local');
 let mainWindow, tray, capture, localServer, appService, retryTimer, isQuitting = false, showOnReady = !background, token;
-let state = { phase: 'idle', busy: false, registered: false, hotkey: HOTKEY, itemId: null, detail: '', revision: 0 };
+let hotkeys;
+let state = { phase: 'idle', busy: false, registered: false, hotkey: DEFAULT_HOTKEY, itemId: null, detail: '', revision: 0 };
+const hotkeyLabel = () => state.hotkey.replace('Super', 'Win').split('+').join(' + ');
 
 function icon() {
   const bytes = Buffer.alloc(32 * 32 * 4);
@@ -101,7 +105,7 @@ function createMainWindow() {
   mainWindow.on('close', event => {
     if (isQuitting) return;
     event.preventDefault(); mainWindow.hide();
-    if (!notified) { tray?.displayBalloon({ title: 'Math Snip 仍在后台运行', content: '按 Alt + Shift + Q 框选，调整后按 Enter 识别；从托盘菜单可以退出。' }); notified = true; }
+    if (!notified) { tray?.displayBalloon({ title: 'Math Snip 仍在后台运行', content: '按 ' + hotkeyLabel() + ' 框选，调整后按 Enter 识别；从托盘菜单可以退出。' }); notified = true; }
   });
 }
 function showMain() {
@@ -176,6 +180,18 @@ async function selected(rect) {
 function trustedMain(event) { return event.sender === mainWindow?.webContents && event.senderFrame?.url === BASE; }
 ipcMain.handle('desktop-state', event => { if (!trustedMain(event)) throw new Error('不允许此操作'); return state; });
 ipcMain.handle('desktop-capture', event => { if (!trustedMain(event)) throw new Error('不允许此操作'); void beginCapture(); });
+ipcMain.handle('desktop-hotkey', async (event, value) => {
+  if (!trustedMain(event)) throw new Error('不允许此操作');
+  if (state.busy) return { error: '请先完成或取消当前截图，再修改快捷键。' };
+  try { const hotkey = await hotkeys.set(value); update({ hotkey, registered: true, detail: '' }); refreshTray(); return { hotkey }; }
+  catch (error) { return { error: error.message }; }
+});
+ipcMain.handle('desktop-directory', async event => {
+  if (!trustedMain(event)) throw new Error('不允许此操作');
+  const preferences = await api('/preferences');
+  const result = await dialog.showOpenDialog(mainWindow, { title: '选择导出文件夹', defaultPath: preferences.outputDirectory, properties: ['openDirectory','createDirectory'] });
+  return result.canceled ? null : result.filePaths[0];
+});
 ipcMain.on('capture-ready', event => {
   const session = capture;
   if (event.sender !== session?.window?.webContents) return;
@@ -184,11 +200,25 @@ ipcMain.on('capture-ready', event => {
 ipcMain.on('capture-select', (event, rect) => { if (event.sender === capture?.window?.webContents) void selected(rect); });
 ipcMain.on('capture-cancel', event => { if (event.sender === capture?.window?.webContents) cancelCapture(); });
 async function boot() {
+  const file = path.join(dataDir, 'desktop-shortcut.json');
+  let initial = DEFAULT_HOTKEY;
+  try { initial = normalizeHotkey(JSON.parse(await readFile(file, 'utf8')).hotkey); } catch {}
+  const { atomicWrite } = await import(pathToFileURL(path.join(root, 'lib/files.js')).href);
+  hotkeys = new HotkeyController({ shortcuts: globalShortcut, capture: () => void beginCapture(), initial, persist: hotkey => atomicWrite(file, JSON.stringify({ hotkey })) });
+  state.hotkey = initial;
   await ensureServer(); await bootstrap(); createMainWindow();
-  tray = new Tray(icon()); tray.setToolTip('Math Snip · Alt + Shift + Q 截图');
+  tray = new Tray(icon()); refreshTray();
+  tray.on('double-click', showMain);
+  registerHotkey();
+  retryTimer = setInterval(() => { if (!state.registered) registerHotkey(); }, 3000);
+  retryTimer.unref();
+}
+function refreshTray() {
+  if (!tray) return;
+  tray.setToolTip('Math Snip · ' + hotkeyLabel() + ' 截图');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 Math Snip', click: showMain },
-    { label: '框选截图（Alt + Shift + Q）', click: () => void beginCapture() },
+    { label: '框选截图（' + hotkeyLabel() + '）', click: () => void beginCapture() },
     { type: 'separator' },
     { label: '下载新版 / 查看版本', click: () => external(RELEASES) },
     { label: '打开数据目录', click: () => { shell.openPath(dataDir).catch(() => {}); } },
@@ -199,15 +229,12 @@ async function boot() {
       app.quit();
     } },
   ]));
-  tray.on('double-click', showMain);
-  registerHotkey();
-  retryTimer = setInterval(() => { if (!state.registered) registerHotkey(); }, 3000);
-  retryTimer.unref();
 }
 function registerHotkey() {
-  const registered = globalShortcut.isRegistered(HOTKEY) || globalShortcut.register(HOTKEY, () => void beginCapture());
+  if (!hotkeys) return;
+  const registered = hotkeys.register();
   if (registered !== state.registered || state.revision === 0) {
-    update({ registered, ...(state.phase === 'idle' ? { detail: registered ? '' : 'Alt + Shift + Q 已被其他程序占用；关闭冲突程序后会自动恢复，也可点击“截取屏幕”。' } : {}) });
+    update({ registered, ...(state.phase === 'idle' ? { detail: registered ? '' : hotkeyLabel() + ' 已被其他程序占用；可在设置中修改，或关闭冲突程序后自动恢复。' } : {}) });
   }
 }
 if (!app.requestSingleInstanceLock({ background })) app.quit();
