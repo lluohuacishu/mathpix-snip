@@ -1,0 +1,61 @@
+// Offscreen library workflow. No OS inputs, real credentials or external requests.
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const {mkdir,mkdtemp,writeFile,readFile}=require('node:fs/promises');
+const {pathToFileURL}=require('node:url');
+const {app,BrowserWindow}=require('electron');
+const root=path.dirname(__dirname),delay=ms=>new Promise(r=>setTimeout(r,ms));
+let service,server,main,dataDir;const errors=[],opened=[];
+async function run(){
+  await mkdir(path.join(root,'work'),{recursive:true});dataDir=await mkdtemp(path.join(root,'work','library-ui-'));app.setPath('userData',path.join(dataDir,'profile'));
+  await app.whenReady();
+  const {createApp}=await import(pathToFileURL(path.join(root,'server.js')).href);
+  const directory=path.join(dataDir,'output'),folder=path.join(directory,'积分讲义');await mkdir(path.join(folder,'images'),{recursive:true});
+  const artifacts={};for(const ext of ['docx','md','mmd']){const file=path.join(folder,'积分讲义.'+ext);await writeFile(file,ext==='md'?'![图](images/plot.png)':'original-'+ext);artifacts[ext]={status:'completed',path:file};}
+  await writeFile(path.join(folder,'images','plot.png'),'image');await writeFile(path.join(directory,'旧版 Word.docx'),'original-word');await writeFile(path.join(directory,'已存在.docx'),'keep');
+  service=await createApp({dataDir,wordDirectory:directory,testCredentials:{appId:'',appKey:''},openFolder:async file=>opened.push(file),openWord:async file=>opened.push(file),fetchImpl:async()=>{throw new Error('Unexpected remote call');}});
+  await service.store.put({id:'calculus',title:'积分讲义',kind:'pdf',createdAt:'2026-01-02T00:00:00Z',mmd:'## 积分讲义\n\n$$\\int x\\,dx=\\frac{x^2}{2}+C$$',status:'completed',pdfTask:{mode:'files',status:'completed',folder,stem:'积分讲义',outputDirectory:directory,artifacts}});
+  await service.store.put({id:'formula',title:'常用公式',kind:'text',createdAt:'2026-01-03T00:00:00Z',mmd:'## 常用公式\n\n$$a^2+b^2=c^2$$',status:'completed'});
+  server=service.app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+  main=new BrowserWindow({width:1400,height:1000,show:false,webPreferences:{offscreen:true,sandbox:true,contextIsolation:true,nodeIntegration:false,backgroundThrottling:false}});
+  main.webContents.on('console-message',(...args)=>{const d=args.find(a=>a&&typeof a==='object'&&'message'in a);if(d?.level==='error')errors.push(d.message);});
+  await main.loadURL('http://127.0.0.1:'+server.address().port);
+  const evaluate=js=>main.webContents.executeJavaScript(js);
+  async function until(expression){for(let n=0;n<160;n++){if(await evaluate(expression))return;await delay(50);}throw new Error('Timed out: '+expression);}
+  const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const input=(selector,value)=>evaluate(`{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));}`);
+  await until('document.querySelector("#title").value==="常用公式" && !document.querySelector("#rename-record").disabled');
+  await click('#favorite');await until('document.querySelector("#favorite").getAttribute("aria-pressed")==="true" && !document.querySelector("#favorite").disabled');
+  await click('.history-star[data-id="calculus"]');await until('document.querySelector("#favorites-count").textContent==="2"');
+  assert.equal(await evaluate('document.querySelector("#title").value'),'常用公式');
+  await click('#history-favorites');await until('document.querySelectorAll(".history-item").length===2');
+  await click('.history-star[data-id="formula"]');await until('document.querySelectorAll(".history-item").length===1 && !document.querySelector("#favorite").disabled');
+  assert.equal(await evaluate('document.querySelector("#title").value'),'常用公式');
+  await input('#search','不存在');assert.equal(await evaluate('document.querySelectorAll(".history-item").length'),0);
+  await input('#search','积分');assert.equal(await evaluate('document.querySelectorAll(".history-item").length'),1);
+  await new Promise(resolve=>{main.webContents.once('did-finish-load',resolve);main.reload();});
+  await until('document.querySelector("#history-favorites").getAttribute("aria-pressed")==="true" && document.querySelectorAll(".history-item").length===1');
+  await click('.history-item[data-id="calculus"]');await until('document.querySelector("#title").value==="积分讲义" && !document.querySelector("#rename-record").disabled');
+  await click('#rename-record');await until('document.querySelector("#rename-dialog").open');await input('#rename-name','高数复习资料');await evaluate('document.querySelector("#rename-form").requestSubmit()');
+  await until('!document.querySelector("#rename-dialog").open && document.querySelector("#title").value==="高数复习资料"');
+  assert.equal((await service.store.get('calculus')).favorite,true);assert.equal((await service.store.get('calculus')).pdfTask.folder,folder);
+  await until('document.querySelector("#preview mjx-container")!==null');await delay(300);
+  await writeFile(path.join(dataDir,'favorites-preview.png'),(await main.webContents.capturePage()).toPNG());
+  await click('#open-local-files');await until('document.querySelectorAll(".local-file-row").length===3');
+  const renameRow=async name=>evaluate(`{const row=[...document.querySelectorAll('.local-file-row')].find(r=>r.querySelector('strong').textContent===${JSON.stringify(name)});row.querySelector('[data-rename-id]').click();}`);
+  await renameRow('旧版 Word.docx');await until('document.querySelector("#rename-dialog").open');await input('#rename-name','已存在');await evaluate('document.querySelector("#rename-form").requestSubmit()');
+  await until('!document.querySelector("#rename-error").hidden && !document.querySelector("#rename-submit").disabled');
+  assert.match(await evaluate('document.querySelector("#rename-error").textContent'),/同名/);assert.equal(await readFile(path.join(directory,'已存在.docx'),'utf8'),'keep');
+  await input('#rename-name','圆的方程');await evaluate('document.querySelector("#rename-form").requestSubmit()');
+  await until('!document.querySelector("#rename-dialog").open && document.querySelector("#local-files-list").textContent.includes("圆的方程.docx")');
+  assert.equal(await readFile(path.join(directory,'圆的方程.docx'),'utf8'),'original-word');
+  await renameRow('积分讲义');await until('document.querySelector("#rename-dialog").open');await input('#rename-name','高数复习');await evaluate('document.querySelector("#rename-form").requestSubmit()');
+  await until('!document.querySelector("#rename-dialog").open && document.querySelector("#local-files-list").textContent.includes("高数复习")');
+  assert.equal((await service.store.get('calculus')).pdfTask.stem,'高数复习');
+  await evaluate('document.querySelector(".local-file-actions button").click()');await until('document.querySelector("#local-files-status").textContent.includes("已请求打开")');assert.equal(opened.length,1);
+  await delay(300);await writeFile(path.join(dataDir,'local-files-preview.png'),(await main.webContents.capturePage()).toPNG());
+  await click('#local-files-dialog .close');assert.equal(await evaluate('document.querySelector("#pdf-result-detail").textContent'),path.join(directory,'高数复习'));
+  assert.deepEqual(errors,[]);assert.equal(main.isVisible(),false);
+  console.log(JSON.stringify({status:'PASS',checks:['favorite persistence/filter/search','record rename','legacy Word rename','collision error','PDF group rename and path refresh','hidden window'],dataDir}));
+}
+run().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(main&&!main.isDestroyed())main.destroy();await service?.pdf.close();await service?.word.close();server?.closeAllConnections();if(server)await new Promise(r=>server.close(r));app.exit(process.exitCode||0);});

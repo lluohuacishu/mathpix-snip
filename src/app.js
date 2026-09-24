@@ -4,12 +4,15 @@ import { selectedPages } from '../lib/pdf-options.js';
 import { initInk, paintStrokes } from './ink.js';
 import { initUsage } from './usage.js';
 import { initPreferences } from './preferences.js';
+import { initLocalFiles } from './local-files.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const state = { token: '', settings: {}, items: [], current: null, formulas: [], dirty: false, tab: 'preview', busy: false, showFormulas: true };
 let desktopState = null, desktopQueue = Promise.resolve();
 let preferencesUI, preferences = { autoOpenWord:true }, keyCheckRevision = 0;
+let localFilesUI, favoritesOnly = false;
+const favoritePending = new Set();
 let pdfMode = 'files', pdfRates = {files:0.0015,fast:0.005}, pdfDialogId, outputDirectory = '', originalSeq = 0;
 const pdfActive = item => !!item?.pdfTask && ['submitting','processing','saving'].includes(item.pdfTask.status);
 let toastTimer, saveTimer, renderTimer, pollTimer, wordTimer, renderSeq = 0, savePromise = Promise.resolve(), sourceUrl;
@@ -71,11 +74,32 @@ function updateNotice() {
 async function refreshHistory() { state.items = await api('/items'); drawHistory(); }
 function drawHistory() {
   const q = $('#search').value.trim().toLowerCase();
-  const items = state.items.filter(i => (i.title + i.excerpt).toLowerCase().includes(q));
+  const items = state.items.filter(i => (!favoritesOnly || i.favorite) && (i.title + i.excerpt).toLowerCase().includes(q));
   $('#history-count').textContent = state.items.length;
-  $('#history').innerHTML = items.length ? items.map(i => '<button class="history-item ' + (i.id === state.current?.id ? 'active' : '') + '" data-id="' + i.id + '">' + icon(i.kind === 'pdf' ? 'files' : i.kind === 'text' ? 'file-pen-line' : 'scan-text') + '<span><strong>' + escape(i.title) + '</strong><small>' + (i.demo ? '演示示例' : new Date(i.createdAt).toLocaleDateString('zh-CN', { month:'short', day:'numeric' })) + ' · ' + ({ ready:'待识别', processing:'处理中', completed:'已保存', error:'需处理' }[i.status] || '已保存') + '</small></span></button>').join('') : '<p class="micro" style="padding:12px">暂无' + (q ? '匹配的' : '') + '记录</p>';
-  $$('#history button').forEach(b => b.addEventListener('click', () => selectItem(b.dataset.id).catch(showError)));
+  $('#favorites-count').textContent = state.items.filter(i=>i.favorite).length;
+  $('#history-all').setAttribute('aria-pressed',String(!favoritesOnly)); $('#history-favorites').setAttribute('aria-pressed',String(favoritesOnly));
+  $('#history').innerHTML = items.length ? items.map(i => '<div class="history-row '+(i.id===state.current?.id?'active':'')+'"><button class="history-item ' + (i.id === state.current?.id ? 'active' : '') + '" data-id="' + i.id + '">' + icon(i.kind === 'pdf' ? 'files' : i.kind === 'text' ? 'file-pen-line' : 'scan-text') + '<span><strong>' + escape(i.title) + '</strong><small>' + (i.demo ? '演示示例' : new Date(i.createdAt).toLocaleDateString('zh-CN', { month:'short', day:'numeric' })) + ' · ' + ({ ready:'待识别', processing:'处理中', completed:'已保存', error:'需处理' }[i.status] || '已保存') + '</small></span></button><button class="history-star icon-button" data-id="'+i.id+'" aria-label="'+(i.favorite?'取消收藏':'收藏')+'：'+escape(i.title)+'" title="'+(i.favorite?'取消收藏':'收藏')+'" aria-pressed="'+!!i.favorite+'" '+(favoritePending.has(i.id)?'disabled':'')+'>'+icon('star')+'</button></div>').join('') : '<p class="micro history-empty">'+(q?'没有匹配的记录':favoritesOnly?'还没有收藏，点击记录旁的星星即可收藏':'暂无记录')+'</p>';
+  $$('#history .history-item').forEach(b => b.addEventListener('click', () => selectItem(b.dataset.id).catch(showError)));
+  $$('#history .history-star').forEach(b => b.addEventListener('click', () => toggleFavorite(b.dataset.id).catch(showError)));
+  updateFavorite();
   refreshIcons();
+}
+function updateFavorite() {
+  const current = state.items.find(i=>i.id===state.current?.id) || state.current;
+  const button = $('#favorite'); button.disabled=!current || favoritePending.has(current.id);
+  button.setAttribute('aria-pressed',String(!!current?.favorite)); button.title=current?.favorite?'取消收藏':'收藏当前记录';
+  button.innerHTML=icon('star')+(current?.favorite?'已收藏':'收藏');
+}
+async function toggleFavorite(id) {
+  if(favoritePending.has(id))return;
+  const item=state.items.find(i=>i.id===id); if(!item)return;
+  favoritePending.add(id); drawHistory();
+  try {
+    if(state.current?.id===id)await saveCurrent();
+    const result=await api('/items/'+id+'/favorite',{method:'PATCH',body:{favorite:!item.favorite}});
+    if(state.current?.id===id)state.current.favorite=result.favorite;
+    await refreshHistory();
+  } finally {favoritePending.delete(id);drawHistory();}
 }
 async function selectItem(id) {
   await saveCurrent(); const i = await api('/items/' + id); await showItem(i);
@@ -107,6 +131,8 @@ function updateDesktopControls() {
   $('#crop').disabled = active;
   $('#editor').disabled = !state.current || active;
   $('#title').disabled = active;
+  $('#rename-record').disabled = !state.current || state.busy || active;
+  updateFavorite(); refreshIcons();
   if (active && !state.current?.pdfTask) notice('截图正在自动识别，请稍候…');
 }
 function updatePdfPanel() {
@@ -375,6 +401,12 @@ async function init() {
   pdfMode = boot.pdfMode || 'files'; pdfRates = boot.pdfRates || pdfRates; outputDirectory = boot.wordDirectory;
   $('#export-location').textContent = boot.wordDirectory || '当前用户的 Documents/Mathsnip';
   preferencesUI = initPreferences({ api, changed:updatePreferences });
+  localFilesUI = initLocalFiles({api,saveCurrent,toast,refreshIcons,changed:async()=>{
+    await refreshHistory();
+    const id=state.current?.id;
+    if(id){ const item=await api('/items/'+id); if(state.current?.id===id){state.current.pdfTask=item.pdfTask;state.current.localExports=item.localExports;if(!state.dirty){state.current.title=item.title;$('#title').value=item.title;}updatePdfPanel();} }
+  }});
+  try { favoritesOnly=localStorage.getItem('mathsnip-favorites-only')==='1'; } catch {}
   if (boot.preferences) updatePreferences(boot.preferences);
   $$('.close').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
   on('#welcome-configure','click',() => { $('#welcome-dialog').close(); openSettings(); });
@@ -398,6 +430,11 @@ async function init() {
   on('#demo','click',loadDemo); on('#empty-demo','click',loadDemo); on('#help','click',() => modal('#help-dialog'));
   on('#new-text','click',async () => { await saveCurrent(); const i = await api('/items',{ method:'POST',body:{ kind:'text',title:'新建公式笔记' } }); await refreshHistory(); await showItem(i); setTab('preview'); $('#editor').focus(); });
   on('#search','input',drawHistory);
+  for(const [selector,value] of [['#history-all',false],['#history-favorites',true]])on(selector,'click',()=>{favoritesOnly=value;try{localStorage.setItem('mathsnip-favorites-only',value?'1':'0');}catch{}drawHistory();});
+  on('#favorite','click',()=>state.current && toggleFavorite(state.current.id));
+  on('#rename-record','click',()=>localFilesUI.renameRecord(state.current));
+  on('#open-local-files','click',()=>localFilesUI.open());
+  on('#pdf-manage-files','click',()=>localFilesUI.open());
   on('#editor','input',() => { markDirty(); clearTimeout(renderTimer); renderTimer = setTimeout(renderPreview,350); });
   on('#title','input',markDirty);
   on('#copy-all','click',() => copy($('#editor').value)); on('#editor-copy','click',() => copy($('#editor').value));
@@ -447,7 +484,7 @@ async function init() {
       $('#recognize').disabled = false; $('#recognize').innerHTML = icon('scan-text') + '开始识别'; $('#crop').hidden = true;
       state.formulas = []; await renderPreview(); setTab('preview'); updateNotice();
     }
-    updatePdfPanel(); toast('记录已删除');
+    updatePdfPanel(); updateDesktopControls(); toast('记录已删除');
   });
   on('#crop','click',openCrop);
   on('#crop-canvas','pointerdown',e => { cropStart = cropPoint(e); e.target.setPointerCapture(e.pointerId); cropRect = null; });

@@ -1,6 +1,6 @@
 {
   "name": "mathpix-snip-local",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -12,6 +12,7 @@
     "test": "node --test tests/*.test.js",
     "test:desktop": "node scripts/test-desktop.cjs",
     "test:features": "node scripts/test-features.cjs",
+    "test:library": "node scripts/test-library.cjs",
     "pack:win": "npm run build && electron-builder --win --x64 --dir --publish never",
     "dist:win": "npm run build && electron-builder --win nsis zip --x64 --publish never",
     "test:packaged": "node scripts/test-packaged.cjs",

@@ -17,8 +17,10 @@
   <button class="outline feature-entry" id="open-usage"><i data-lucide="chart-no-axes-combined"></i>API 用量统计</button>
   <div class="history-heading"><span>最近记录</span><span id="history-count">0</span></div>
   <div class="search"><i data-lucide="search"></i><input id="search" placeholder="搜索记录…" aria-label="搜索记录"></div>
+  <div class="history-filters" role="group" aria-label="记录筛选"><button id="history-all" aria-pressed="true">全部</button><button id="history-favorites" aria-pressed="false"><i data-lucide="star"></i>收藏<span id="favorites-count">0</span></button></div>
   <nav id="history" aria-label="识别历史"></nav>
   <div class="sidebar-bottom">
+    <button id="open-local-files"><i data-lucide="folder-open"></i>本地文件<i data-lucide="chevron-right"></i></button>
     <button id="demo"><i data-lucide="sparkles"></i>打开演示示例<span>DEMO</span></button>
     <button id="new-text"><i data-lucide="file-pen-line"></i>新建公式笔记</button>
     <button id="settings-side"><i data-lucide="settings-2"></i>设置<i data-lucide="chevron-right"></i></button>
@@ -43,7 +45,7 @@
       <div class="toolbar-group"><button id="copy-all"><i data-lucide="copy"></i>复制全文</button><button id="export" class="primary"><i data-lucide="file-down"></i>导出 Word</button></div>
     </section>
     <div class="notice" id="notice"><i data-lucide="info"></i><span>正在载入工作台…</span><button id="notice-action">API 设置<i data-lucide="arrow-up-right"></i></button></div>
-    <section id="pdf-result" class="pdf-result" hidden aria-live="polite"><strong id="pdf-result-title"></strong><p id="pdf-result-detail"></p><p id="pdf-result-files"></p><div><button class="outline" id="pdf-open-folder">打开文件夹</button><button class="primary" id="pdf-open-word">打开 Word</button><button class="outline" id="pdf-resume">继续任务</button></div></section>
+    <section id="pdf-result" class="pdf-result" hidden aria-live="polite"><strong id="pdf-result-title"></strong><p id="pdf-result-detail"></p><p id="pdf-result-files"></p><div><button class="outline" id="pdf-open-folder">打开文件夹</button><button class="primary" id="pdf-open-word">打开 Word</button><button class="outline" id="pdf-manage-files">管理本地文件</button><button class="outline" id="pdf-resume">继续任务</button></div></section>
     <section class="document">
       <div class="document-bar">
         <div class="tabs" role="tablist" aria-label="文档视图">
@@ -51,9 +53,9 @@
           <button data-tab="original" role="tab" aria-selected="false"><i data-lucide="image"></i>原图</button>
           <button data-tab="data" role="tab" aria-selected="false"><i data-lucide="braces"></i>数据</button>
         </div>
-        <div class="document-controls"><button id="equations-toggle" class="small-button active"><i data-lucide="sigma"></i>公式</button><button id="delete" class="icon-button" aria-label="删除当前记录"><i data-lucide="trash-2"></i></button></div>
+        <div class="document-controls"><button id="favorite" class="small-button" aria-pressed="false" disabled><i data-lucide="star"></i>收藏</button><button id="equations-toggle" class="small-button active"><i data-lucide="sigma"></i>公式</button><button id="delete" class="icon-button" aria-label="删除当前记录"><i data-lucide="trash-2"></i></button></div>
       </div>
-      <div class="document-meta"><div class="doc-name"><i data-lucide="file-text"></i><input id="title" aria-label="记录名称" value="未选择记录"><span id="demo-tag" class="tag" hidden>演示</span></div><span id="saved">自动保存</span></div>
+      <div class="document-meta"><div class="doc-name"><i data-lucide="file-text"></i><input id="title" aria-label="记录名称" value="未选择记录"><button id="rename-record" class="icon-button" aria-label="修改记录名称" title="修改记录名称" disabled><i data-lucide="pencil"></i></button><span id="demo-tag" class="tag" hidden>演示</span></div><span id="saved">自动保存</span></div>
       <div class="document-content">
         <div class="view" id="preview-view"><article class="paper" id="preview"><div class="empty-state"><i data-lucide="scan-text"></i><h2>把纸上的灵感带进来</h2><p>拖入图片或 PDF，或按 Ctrl + V 粘贴截图</p><button class="outline" id="empty-demo">先看看演示效果</button></div></article></div>
         <div class="view original-view" id="original-view" hidden><div id="original"></div><button class="outline crop-button" id="crop" hidden><i data-lucide="crop"></i>裁剪为新截图</button></div>
@@ -64,12 +66,25 @@
       <textarea id="editor" spellcheck="false" aria-label="LaTeX 和 Markdown 源码" placeholder="识别结果会出现在这里。也可以直接输入文字和 $LaTeX$ 公式…" disabled></textarea>
       <footer class="document-footer"><span id="confidence"><span class="dot"></span>就绪</span><span id="char-count">0 字符</span><span class="footer-right" id="word-status">默认生成官方 Word</span></footer>
     </section>
-    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.7.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
+    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.8.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
   </div>
 </main>
 <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" hidden>
 <div id="drop-overlay" hidden><i data-lucide="upload"></i><h2>松开即可导入</h2><p>图片 ≤ 15 MiB · PDF ≤ 100 MiB</p></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="local-files-dialog" class="feature-dialog" aria-labelledby="local-files-heading">
+  <div class="modal-heading"><span class="modal-icon"><i data-lucide="folder-open"></i></span><button class="icon-button close" aria-label="关闭本地文件"><i data-lucide="x"></i></button></div>
+  <h2 id="local-files-heading">本地文件</h2><p class="subtle">管理导出目录中的 Word、Markdown 和 PDF 文档组。文件改名与历史记录标题独立，已记录的文件路径会同步更新。</p>
+  <div class="local-files-toolbar"><div class="search"><i data-lucide="search"></i><input id="local-files-search" aria-label="搜索本地文件" placeholder="搜索名称或路径…"></div><span id="local-files-count" class="micro">0 项</span><button id="local-files-refresh" class="outline"><i data-lucide="refresh-cw"></i>刷新</button></div>
+  <p id="local-files-status" class="feature-status" role="status"></p><div id="local-files-list" aria-label="本地导出文件"></div>
+  <p class="micro">列出当前及默认导出目录、历史记录中已知的保存位置。不会扫描整台电脑；在外部移动文件后，请将导出目录设为对应位置再刷新。</p>
+</dialog>
+<dialog id="rename-dialog" aria-labelledby="rename-heading"><form id="rename-form">
+  <h2 id="rename-heading">重命名</h2><p id="rename-detail" class="subtle"></p>
+  <label for="rename-name">新名称<input id="rename-name" required maxlength="90" autocomplete="off" spellcheck="false"></label>
+  <p id="rename-error" class="inline-error" role="alert" hidden></p>
+  <div class="modal-footer"><button id="rename-cancel" type="button" class="outline close">取消</button><button id="rename-submit" type="submit" class="primary">保存名称</button></div>
+</form></dialog>
 <dialog id="welcome-dialog" aria-labelledby="welcome-heading">
   <div class="modal-heading"><span class="modal-icon"><i data-lucide="scan-text"></i></span><button class="icon-button close" aria-label="稍后配置"><i data-lucide="x"></i></button></div>
   <h2 id="welcome-heading">欢迎使用 Math Snip</h2>
@@ -155,6 +170,6 @@
   <div class="help-tip">PDF 拖入后可选经济或快速模式；完成后自动保存 DOCX、普通 MD、原始 MMD 和配图到设置指定的目录下，是否自动打开 Word 可在设置中修改。截图结果仍可点击“导出 Word”保存打开。</div>
   <p class="micro">快捷键截图会自动上传选区到 Mathpix。关闭桌面窗口后仍在托盘运行；右键托盘图标可退出。多屏时截取鼠标所在屏幕。浏览器版可用 Win + Shift + S 截图，再 Ctrl + V 粘贴。历史包含原文件，保存在应用的本机数据目录。</p>
 </dialog>
-<dialog id="delete-dialog"><h2>删除这条记录？</h2><p class="subtle">将删除本机保存的原文件和识别结果。此操作不会删除 Mathpix 云端记录。</p><div class="modal-footer"><button class="outline close">取消</button><button id="delete-confirm" class="danger">删除记录</button></div></dialog>
+<dialog id="delete-dialog"><h2>删除这条记录？</h2><p class="subtle">将删除本机保存的原文件、识别结果和收藏状态。已导出的文档保留，此操作不会删除 Mathpix 云端记录。</p><div class="modal-footer"><button class="outline close">取消</button><button id="delete-confirm" class="danger">删除记录</button></div></dialog>
 <dialog id="crop-dialog"><div class="modal-heading"><h2>拖动选择识别区域</h2><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="crop-area"><canvas id="crop-canvas"></canvas></div><div class="modal-footer"><span class="micro">生成新记录，保留原图</span><button id="crop-confirm" class="primary">保存裁剪</button></div></dialog>
 </body></html>

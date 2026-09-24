@@ -23,6 +23,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run dist:win
+      - run: npm run test:library
       - run: npm run verify:package
       - run: npm run test:packaged
       - run: npm run checksums

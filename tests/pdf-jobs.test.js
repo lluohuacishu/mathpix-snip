@@ -133,6 +133,20 @@ test('saved remote task resumes after restart without re-upload; completed task 
   await until(()=>second.opened.length===1); assert.equal(second.calls.filter(c=>c.req.method==='POST').length,0);
   await second.pdf.close(); const third=await fixture(t,{dataDir:first.dataDir}); await delay(50); assert.equal(third.opened.length,0); assert.equal(third.calls.length,0);
 });
+test('a renamed partial PDF bundle resumes missing output in the new folder without a second submission',async t=>{
+  const f=await fixture(t,{failMd:true}),item=await f.importPdf('可继续的资料.pdf');
+  await f.req('/preferences','POST',{outputDirectory:path.join(f.dataDir,'output'),autoOpenWord:false});
+  await f.req('/pdf/'+item.id+'/start','POST',{mode:'files'});
+  const partial=await f.done(item.id);assert.equal(partial.pdfTask.status,'partial');await until(()=>!f.pdf.jobs.has(item.id));
+  const row=(await (await f.req('/local-files')).json()).files.find(row=>row.recordIds.includes(item.id));
+  const renamed=await f.req('/local-files/'+row.id+'/rename','POST',{name:'重命名后的资料'});assert.equal(renamed.status,200);
+  const folder=(await renamed.json()).path;await writeFile(path.join(folder,'重命名后的资料.docx'),'user-edited-docx');
+  f.fixMd();assert.equal((await f.req('/pdf/'+item.id+'/resume','POST',{})).status,200);
+  const completed=await f.done(item.id);assert.equal(completed.pdfTask.status,'completed');assert.equal(completed.pdfTask.folder,folder);
+  assert.equal(await readFile(path.join(folder,'重命名后的资料.docx'),'utf8'),'user-edited-docx');
+  assert.match(await readFile(path.join(folder,'重命名后的资料.md'),'utf8'),/images\/figure.png/);
+  assert.equal(f.calls.filter(c=>c.req.method==='POST').length,1);assert.equal(f.calls.filter(c=>c.url.endsWith('.docx')).length,1);
+});
 test('ambiguous submission is saved and cannot silently resubmit or switch modes',async t => {
   let calls=0;
   const f=await fixture(t,{fetchImpl:async()=>{calls++; throw new Error('connection lost');}}),item=await f.importPdf();

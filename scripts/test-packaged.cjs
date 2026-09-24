@@ -1,7 +1,7 @@
 // Exercise the actual packaged application without showing windows or calling Mathpix.
 const assert=require('node:assert/strict');
 const {spawn,execFileSync}=require('node:child_process');
-const {mkdir,mkdtemp,readFile}=require('node:fs/promises');
+const {mkdir,mkdtemp,readFile,writeFile}=require('node:fs/promises');
 const path=require('node:path');
 const net=require('node:net');
 const root=path.dirname(__dirname),executable=path.resolve(process.argv[2]||path.join(root,'dist','win-unpacked','Math Snip.exe'));
@@ -61,11 +61,19 @@ async function run(){
  const hotkey=await first.evaluate('window.desktopCapture.setHotkey("Ctrl+Alt+Shift+F23")');assert.equal(hotkey.hotkey,'Ctrl+Alt+Shift+F23');
  const outputDirectory=path.join(dataDir,'custom exports');
  assert.equal((await request(first,'/preferences',{outputDirectory,autoOpenWord:false})).status,200);
+ await writeFile(path.join(outputDirectory,'old.docx'),'packaged-local-file');
+ const imported=await (await request(first,'/items',{kind:'text',title:'Packaged favorite'})).json();
+ assert.equal((await fetch(first.base+'/api/items/'+imported.id+'/favorite',{method:'PATCH',headers:{'x-snip-token':first.boot.token,'Content-Type':'application/json'},body:JSON.stringify({favorite:true})})).status,200);
+ const files=await fetch(first.base+'/api/local-files',{headers:{'x-snip-token':first.boot.token}}).then(r=>r.json());
+ const local=files.files.find(file=>file.name==='old.docx');assert.ok(local);
+ assert.equal((await request(first,'/local-files/'+local.id+'/rename',{name:'renamed'})).status,200);
+ assert.equal(await readFile(path.join(outputDirectory,'renamed.docx'),'utf8'),'packaged-local-file');
  first.page.close();await stop();const second=await launch();assert.equal(second.boot.settings.configured,true,'Saved credentials must load after a normal exit');assert.equal(second.boot.settings.remember,true);assert.equal(second.boot.settings.appId,'fake-packaged-id');
  assert.equal(second.boot.preferences.outputDirectory,outputDirectory);assert.equal(second.boot.preferences.autoOpenWord,false);
+ const restored=await fetch(second.base+'/api/items/'+imported.id,{headers:{'x-snip-token':second.boot.token}}).then(r=>r.json());assert.equal(restored.favorite,true);
  await until(second,'!!window.desktopCapture');const desktop=await second.evaluate('window.desktopCapture.getState()');assert.equal(desktop.hotkey,'Ctrl+Alt+Shift+F23');assert.equal(desktop.registered,true);
  await until(second,'document.querySelector("#mode")?.textContent.includes("API 已配置")');assert.equal(await second.evaluate('document.querySelector("#welcome-dialog").open'),false);second.page.close();
  await stop();blocker.close();blocker=null;
- console.log(JSON.stringify({result:'PASS',checks:['standalone executable','hidden startup','port collision fallback','built frontend and SVG','math rendering in ASAR','first-run demo and settings actions','native encrypted credentials survive restart','custom shortcut re-registers after restart','export preferences survive restart','no Mathpix requests'],dataDir}));
+ console.log(JSON.stringify({result:'PASS',checks:['standalone executable','hidden startup','port collision fallback','built frontend and SVG','math rendering in ASAR','first-run demo and settings actions','native encrypted credentials survive restart','custom shortcut re-registers after restart','export preferences and favorites survive restart','local file rename in ASAR','no Mathpix requests'],dataDir}));
 }
 run().catch(e=>{console.error(e.stack);process.exitCode=1;}).finally(async()=>{await stop();blocker?.close();});

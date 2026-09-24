@@ -19,6 +19,7 @@ import { InkRecognition } from './lib/ink.js';
 import { UsageStats } from './lib/usage.js';
 import { Preferences } from './lib/preferences.js';
 import { checkCredentials } from './lib/credential-check.js';
+import { LocalFiles } from './lib/local-files.js';
 
 const require = createRequire(import.meta.url);
 const { MathpixMarkdownModel: MM } = require('mathpix-markdown-it');
@@ -73,6 +74,11 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
   const pdf = new PdfJobs({store,client,word,directory:wordDirectory,getDirectory:()=>preferences.value.outputDirectory,autoOpenWord:()=>preferences.value.autoOpenWord,openWord,openFolder,...pdfOptions,update:(id,fn) => locked(id,async () => {
     const item = await getItem(id); await fn(item); await store.put(item);
   })});
+  const localFiles = new LocalFiles({store,directory:wordDirectory,getDirectory:()=>preferences.value.outputDirectory,lock:locked,isBusy:id=>pdf.jobs.has(id),openFolder});
+  await localFiles.init();
+  app.get('/api/local-files',async(req,res)=>res.json(await locked('local-files',()=>localFiles.list())));
+  app.post('/api/local-files/:id/rename',async(req,res)=>res.json(await locked('local-files',()=>localFiles.rename(req.params.id,req.body.name))));
+  app.post('/api/local-files/:id/open',async(req,res)=>res.json(await locked('local-files',()=>localFiles.open(req.params.id))));
   app.post('/api/pdf/import',express.raw({type:'application/pdf',limit:PDF_MAX_BYTES}),async (req,res) => {
     const bytes = req.body;
     if (!Buffer.isBuffer(bytes) || !bytes.subarray(0,5).equals(Buffer.from('%PDF-'))) throw new ApiError('请选择有效的 PDF 文件。');
@@ -98,8 +104,13 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
     res.json(await pdf.submit(item,{mode,pages:req.body.pages}));
   }));
   app.post('/api/pdf/:id/resume',async (req,res) => { await pdf.retry(req.params.id); res.json(await getItem(req.params.id)); });
-  app.post('/api/pdf/:id/open',async (req,res) => res.json(await pdf.open(req.params.id,req.body.kind === 'folder' ? 'folder' : 'word')));
+  app.post('/api/pdf/:id/open',async (req,res) => res.json(await locked(req.params.id,()=>pdf.open(req.params.id,req.body.kind === 'folder' ? 'folder' : 'word'))));
   app.get('/api/items/:id', async (req, res) => res.json(await getItem(req.params.id)));
+  app.patch('/api/items/:id/favorite',async(req,res)=>locked(req.params.id,async()=>{
+    if (typeof req.body.favorite !== 'boolean') throw new ApiError('收藏状态必须为 true 或 false。');
+    const item = await getItem(req.params.id); item.favorite = req.body.favorite;
+    await store.put(item); res.json({id:item.id,favorite:item.favorite});
+  }));
   app.patch('/api/items/:id', async (req, res) => locked(req.params.id, async () => {
     const i = await getItem(req.params.id);
     if (i.pdfTask && ['submitting','processing','saving'].includes(i.pdfTask.status)) throw new ApiError('PDF 正在处理，完成后再编辑或重命名。',409);
@@ -216,12 +227,16 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
     const id = req.params.id;
     let task = wordSaves.get(id);
     if (!task) {
-      task = (async () => {
+      task = locked('local-files',()=>locked(id,async () => {
         const item = await getItem(id), buffer = await word.cached(item);
         if (!buffer) throw new ApiError('DOCX 尚未完成转换，请稍后重试。', 409);
-        try { return await saveAndOpenWord({ buffer, title:item.title, directory:preferences.value.outputDirectory, autoOpen:preferences.value.autoOpenWord, openFile:openWord }); }
+        try {
+          const result = await saveAndOpenWord({ buffer, title:item.title, directory:preferences.value.outputDirectory, autoOpen:preferences.value.autoOpenWord, openFile:openWord });
+          item.localExports = [...(item.localExports || []),{path:result.path,savedAt:new Date().toISOString()}];
+          await store.put(item); return result;
+        }
         catch (error) { throw new ApiError(error.message, 500); }
-      })();
+      }));
       wordSaves.set(id, task);
     }
     try { res.json(await task); }
@@ -241,7 +256,7 @@ export async function createApp({ dataDir = process.env.SNIP_DATA_DIR || path.jo
           item.word.hash === wordHash(item.mmd) && (item.conversionId || (item.pdfId && item.wordFromPdf))) word.start(item.id);
     }
   }
-  return { app, store, credentials, word, pdf, preferences };
+  return { app, store, credentials, word, pdf, preferences, localFiles };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
