@@ -2,7 +2,7 @@ const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, Menu, nati
 const path = require('node:path');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
-const { pixelRect, processCapture } = require('./capture-core.cjs');
+const { pixelRect, processCapture, maskBitmap } = require('./capture-core.cjs');
 const { DEFAULT_HOTKEY, normalizeHotkey, HotkeyController } = require('./hotkey.cjs');
 const { readFile } = require('node:fs/promises');
 const root = path.dirname(__dirname), VERSION = require('../package.json').version;
@@ -157,7 +157,7 @@ async function beginCapture() {
       closeCapture(session); update({ phase: 'error', busy: false, detail: '截图界面加载失败，请重试。' }); showMain();
     }, 15000);
     await win.loadFile(path.join(__dirname, 'capture.html'));
-    if (capture === session) win.webContents.send('capture-frame', { dataUrl: session.image.toDataURL() });
+    if (capture === session) win.webContents.send('capture-frame', { dataUrl: session.image.toDataURL(), masksSupported:true });
   } catch (error) {
     closeCapture(session); update({ phase: 'error', busy: false, detail: error.message }); showMain();
   }
@@ -168,7 +168,9 @@ async function selected(rect) {
   // Detach before awaiting so repeated selection cannot upload twice.
   closeCapture(session);
   try {
-    const source = session.image.crop(pixelRect(rect, session.image.getSize())).toDataURL();
+    const size=session.image.getSize(),area=pixelRect(rect,size),cropped=session.image.crop(area);
+    const masks=rect.masks===undefined?[]:rect.masks,bitmap=maskBitmap(cropped.toBitmap(),area,size,masks);
+    const source = masks.length ? nativeImage.createFromBitmap(bitmap,{width:area.width,height:area.height}).toDataURL() : cropped.toDataURL();
     session.image = null;
     update({ phase: 'processing', busy: true, detail: '正在保存截图…' });
     const boot = await bootstrap();

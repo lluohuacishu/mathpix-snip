@@ -19,4 +19,16 @@ async function processCapture({ source, configured, api, report }) {
     report({ itemId: item.id, phase: 'completed', busy: false, detail: '识别完成，正在准备官方 Word。' });
   } catch (error) { report({ itemId: item.id, phase: 'error', busy: false, detail: error.message }); }
 }
-module.exports = { pixelRect, processCapture };
+function maskBitmap(bitmap,crop,size,masks=[]) {
+  if(!Array.isArray(masks)||masks.length>100)throw new Error('遮罩数量无效，最多支持 100 个。');
+  if(bitmap.length!==crop.width*crop.height*4)throw new Error('截图像素尺寸不匹配。');
+  for(const m of masks){
+    if(!m||!['white','black'].includes(m.color)||!['x','y','w','h'].every(key=>typeof m[key]==='number'&&Number.isFinite(m[key]))||m.w<=0||m.h<=0)throw new Error('遮罩数据无效，请重新截图。');
+    const left=Math.max(0,Math.floor(m.x*size.width)-crop.x),top=Math.max(0,Math.floor(m.y*size.height)-crop.y);
+    const right=Math.min(crop.width,Math.ceil((m.x+m.w)*size.width)-crop.x),bottom=Math.min(crop.height,Math.ceil((m.y+m.h)*size.height)-crop.y);
+    const color=m.color==='white'?255:0;
+    for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){const offset=(y*crop.width+x)*4;bitmap[offset]=bitmap[offset+1]=bitmap[offset+2]=color;bitmap[offset+3]=255;}
+  }
+  return bitmap;
+}
+module.exports = { pixelRect, processCapture, maskBitmap };

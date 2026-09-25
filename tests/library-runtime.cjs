@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const path=require('node:path');
 const {mkdir,mkdtemp,writeFile,readFile}=require('node:fs/promises');
 const {pathToFileURL}=require('node:url');
-const {app,BrowserWindow}=require('electron');
+const {app,BrowserWindow,nativeImage}=require('electron');
 const root=path.dirname(__dirname),delay=ms=>new Promise(r=>setTimeout(r,ms));
 let service,server,main,dataDir;const errors=[],opened=[];
 async function run(){
@@ -57,7 +57,40 @@ async function run(){
   await evaluate('document.querySelector(".local-file-actions button").click()');await until('document.querySelector("#local-files-status").textContent.includes("已请求打开")');assert.equal(opened.length,1);
   await delay(300);await writeFile(path.join(dataDir,'local-files-preview.png'),(await main.webContents.capturePage()).toPNG());
   await click('#local-files-dialog .close');assert.equal(await evaluate('document.querySelector("#pdf-result-detail").textContent'),path.join(directory,'高数复习'));
+  // The editor changes real pixels in a new record, leaving the source untouched.
+  const pixels=Buffer.alloc(800*500*4,100);for(let i=3;i<pixels.length;i+=4)pixels[i]=255;
+  const original=nativeImage.createFromBitmap(pixels,{width:800,height:500}).toDataURL();
+  await service.store.put({id:'mask-original',title:'遮罩示例.png',kind:'image',source:original,createdAt:new Date().toISOString(),mmd:'',status:'ready'});
+  await evaluate('localStorage.removeItem("mathsnip-favorites-only")');
+  await new Promise(resolve=>{main.webContents.once('did-finish-load',resolve);main.reload();});
+  await until('document.querySelector("#title").value==="遮罩示例.png" && !document.querySelector("#mask-open").disabled');
+  await click('[data-tab="original"]');await click('#mask-open');await until('document.querySelector("#mask-dialog").open');
+  assert.equal(await evaluate('document.querySelector("#mask-save").disabled'),true);
+  const drawMasks=`{
+    const stage=document.querySelector('#mask-stage'),r=stage.getBoundingClientRect();stage.setPointerCapture=()=>{};
+    const pointer=(type,x,y,target=stage)=>target.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,pointerId:1,clientX:r.x+r.width*x,clientY:r.y+r.height*y}));
+    const drag=(x,y,a,b,target=stage)=>{pointer('pointerdown',x,y,target);pointer('pointermove',a,b);pointer('pointerup',a,b);};
+    document.querySelector('#image-mask-white').click();drag(.1,.1,.3,.3);
+    document.querySelector('#image-mask-black').click();drag(.5,.5,.7,.7);
+    drag(.6,.6,.65,.65,document.querySelector('.mask-block.selected'));
+    drag(.75,.75,.8,.8,document.querySelector('[data-mask-edge="se"]'));
+  }`;
+  await evaluate(drawMasks);assert.equal(await evaluate('document.querySelectorAll("#image-masks .mask-block").length'),2);
+  await click('#image-mask-clear');assert.equal(await evaluate('document.querySelector("#mask-save").disabled'),true);
+  await click('#image-mask-undo');assert.equal(await evaluate('document.querySelectorAll("#image-masks .mask-block").length'),2);
+  await click('#mask-dialog .close');assert.equal((await service.store.list()).length,3);
+  await click('#mask-open');await until('document.querySelector("#mask-dialog").open');
+  assert.equal(await evaluate('document.querySelectorAll("#image-masks .mask-block").length'),0);
+  await evaluate(drawMasks);await delay(250);await writeFile(path.join(dataDir,'masks-preview.png'),(await main.webContents.capturePage()).toPNG());
+  assert.equal(await evaluate('document.querySelector("#mask-save").disabled'),false);
+  await click('#mask-save');await until('!document.querySelector("#mask-dialog").open && document.querySelector("#title").value==="遮罩示例-遮罩.png"');
+  const saved=(await service.store.list()).find(item=>item.title==='遮罩示例-遮罩.png'),result=await service.store.get(saved.id),edited=nativeImage.createFromDataURL(result.source);
+  assert.equal(result.status,'ready');assert.deepEqual(edited.getSize(),{width:800,height:500});
+  assert.equal((await service.store.get('mask-original')).source,original);
+  const bitmap=edited.toBitmap(),pixel=(x,y)=>[...bitmap.subarray((y*800+x)*4,(y*800+x)*4+4)];
+  assert.deepEqual(pixel(160,100),[255,255,255,255]);assert.deepEqual(pixel(560,350),[0,0,0,255]);assert.deepEqual(pixel(20,20),[100,100,100,255]);
+  assert.equal((await service.store.list()).length,4);
   assert.deepEqual(errors,[]);assert.equal(main.isVisible(),false);
-  console.log(JSON.stringify({status:'PASS',checks:['favorite persistence/filter/search','record rename','legacy Word rename','collision error','PDF group rename and path refresh','hidden window'],dataDir}));
+  console.log(JSON.stringify({status:'PASS',checks:['favorite persistence/filter/search','record rename','legacy Word rename','collision error','PDF group rename and path refresh','white and black masks','mask move/resize/clear/undo/cancel','full-resolution masked copy and original preservation','no automatic OCR after masking','hidden window'],dataDir}));
 }
 run().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(main&&!main.isDestroyed())main.destroy();await service?.pdf.close();await service?.word.close();server?.closeAllConnections();if(server)await new Promise(r=>server.close(r));app.exit(process.exitCode||0);});

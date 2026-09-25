@@ -1,10 +1,25 @@
+import { MaskEditor } from '../public/mask-editor.js';
 const frame=document.querySelector('#frame'),selection=document.querySelector('#selection'),shade=document.querySelector('#shade'),tip=document.querySelector('#tip'),actions=document.querySelector('#actions');
-let drag=null,rect=null,submitted=false,ready=false;
+let drag=null,rect=null,submitted=false,ready=false,masksSupported=false;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 const point=e=>({x:clamp(e.clientX,0,innerWidth),y:clamp(e.clientY,0,innerHeight)});
 const valid=()=>rect&&rect.w>=6&&rect.h>=6;
-window.captureOverlay.onFrame(async({dataUrl})=>{frame.src=dataUrl;await frame.decode();ready=true;document.body.dataset.ready='true';window.captureOverlay.ready();});
+const masks=new MaskEditor({surface:document.body,layer:document.querySelector('#capture-masks'),bounds:()=>rect?{x:rect.x/innerWidth,y:rect.y/innerHeight,w:rect.w/innerWidth,h:rect.h/innerHeight}:null,enabled:()=>masksSupported&&ready&&!submitted&&valid(),changed:()=>{
+  document.querySelector('#mask-undo').disabled=!masks.history.length||!!masks.drag;
+  document.querySelector('#mask-delete').disabled=masks.selected<0||!!masks.drag;
+  document.querySelector('#confirm').disabled=!!masks.drag||submitted;
+  document.body.dataset.masking=String(masks.active);draw();
+}});
+for(const [id,tool] of [['select-tool','off'],['white-mask','white'],['black-mask','black']])document.querySelector('#'+id).addEventListener('click',()=>{masks.setTool(tool);for(const button of ['select-tool','white-mask','black-mask'])document.querySelector('#'+button).setAttribute('aria-pressed',String(button===id));});
+document.querySelector('#mask-undo').addEventListener('click',()=>masks.undo());
+document.querySelector('#mask-delete').addEventListener('click',()=>masks.remove());
+window.captureOverlay.onFrame(async({dataUrl,masksSupported:supported})=>{
+  frame.src=dataUrl;await frame.decode();masksSupported=supported===true;
+  for(const id of ['white-mask','black-mask']){const button=document.querySelector('#'+id);button.disabled=!masksSupported;button.title=masksSupported?'':'请从托盘退出并重启工具以启用遮罩';}
+  ready=true;document.body.dataset.ready='true';draw();window.captureOverlay.ready();
+});
 function draw(){
+  masks.render();tip.textContent=masks.active?'拖动绘制遮罩 · 可移动 / 缩放 · Delete 删除 · Ctrl + Z 撤销 · Enter 识别':'拖动框选 · 可移动或调整边缘 · Enter 确认识别 · Esc / 右键取消'+(masksSupported?'':' · 重启工具后可使用遮罩');
   selection.hidden=!rect;shade.hidden=!!rect;tip.hidden=!!drag;
   if(rect)Object.assign(selection.style,{left:rect.x+'px',top:rect.y+'px',width:rect.w+'px',height:rect.h+'px'});
   actions.hidden=!valid()||!!drag;
@@ -16,18 +31,18 @@ function draw(){
   }
 }
 function confirm(){
-  if(!ready||submitted||drag||!valid())return;
+  if(!ready||submitted||drag||masks.drag||!valid())return;
   submitted=true;document.querySelector('#confirm').disabled=true;
-  window.captureOverlay.select({x:rect.x/innerWidth,y:rect.y/innerHeight,w:rect.w/innerWidth,h:rect.h/innerHeight});
+  window.captureOverlay.select({x:rect.x/innerWidth,y:rect.y/innerHeight,w:rect.w/innerWidth,h:rect.h/innerHeight,masks:masks.masks});
 }
-function reset(){if(submitted)return;drag=null;rect=null;draw();}
+function reset(){if(submitted)return;drag=null;rect=null;masks.reset();document.querySelector('#select-tool').click();draw();}
 document.querySelector('#confirm').addEventListener('click',confirm);
 document.querySelector('#reset').addEventListener('click',reset);
 document.querySelector('#cancel').addEventListener('click',()=>window.captureOverlay.cancel());
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();window.captureOverlay.cancel();}
   if(e.key==='Enter'){e.preventDefault();confirm();}
-  if(rect&&!drag&&!submitted&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+  if(rect&&!drag&&!submitted&&!masks.active&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
     e.preventDefault();const n=e.shiftKey?10:1;
     rect.x=clamp(rect.x+(e.key==='ArrowLeft'?-n:e.key==='ArrowRight'?n:0),0,innerWidth-rect.w);
     rect.y=clamp(rect.y+(e.key==='ArrowUp'?-n:e.key==='ArrowDown'?n:0),0,innerHeight-rect.h);draw();

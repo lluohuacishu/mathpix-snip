@@ -15,6 +15,8 @@
     "public/index.html",
     "public/style.css",
     "public/app.js",
+    "public/mask-editor.js",
+    "public/mask-editor.css",
     "public/favicon.svg",
     "public/sample.svg",
     "assets/math-snip.ico",

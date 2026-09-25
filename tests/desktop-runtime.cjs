@@ -24,7 +24,7 @@ let service, server, main, releaseOcr, failOcr = false, hotkeyCallback, register
 const counts = { ocr: 0, conversion: 0, show: 0, screenshot: 0 };
 const openedWords = [], openedFolders = [], fakeDocx = Buffer.from('PK\x03\x04synthetic-docx');
 let failOpenFolder = false;
-const pdfSubmissions = [];
+const pdfSubmissions = [], imageSubmissions=[];
 const errors = [];
 const activeKeys = new Map(), usageProbes = [];
 let usageProbeStatus = 200;
@@ -43,6 +43,7 @@ async function run() {
     if (url.endsWith('.md.zip')) return new Response(archive);
     if (url.endsWith('.mmd')) return new Response(mmd);
     if (url.endsWith('/v3/text')) {
+      const file=options.body.get('file');imageSubmissions.push(Buffer.from(await file.arrayBuffer()));
       counts.ocr++;
       if (failOcr) return new Response(JSON.stringify({ error:'Request too large' }), { status:413 });
       await new Promise(resolve => { releaseOcr = resolve; });
@@ -67,7 +68,8 @@ async function run() {
     });
     return win;
   }
-  const source = nativeImage.createFromBitmap(Buffer.alloc(640 * 400 * 4, 255), { width:640, height:400 });
+  const sourcePixels=Buffer.alloc(640*400*4,80);for(let i=3;i<sourcePixels.length;i+=4)sourcePixels[i]=255;
+  const source = nativeImage.createFromBitmap(sourcePixels, { width:640, height:400 });
   const chosenDirectory = path.join(dataDir,'selected folder');
   const testElectron = { ...electron, BrowserWindow:HiddenWindow, Tray:FakeTray,
     dialog: { ...electron.dialog, showOpenDialog:async()=>({canceled:false,filePaths:[chosenDirectory]}) },
@@ -114,10 +116,39 @@ async function run() {
       const r=document.querySelector('#selection').getBoundingClientRect();if(Math.abs(r.x/innerWidth-.4)>.005||Math.abs(r.width/innerWidth-.5)>.005)throw new Error('adjusted selection incorrect');
     `);
     assert.equal(counts.ocr,before);
+    if(adjust){
+      await win.webContents.executeJavaScript(`{
+        const pointer=(type,x,y,target=document.body)=>target.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,pointerId:1,clientX:innerWidth*x,clientY:innerHeight*y}));
+        const drag=(x,y,a,b,target=document.body)=>{pointer('pointerdown',x,y,target);pointer('pointermove',a,b);pointer('pointerup',a,b);};
+        document.querySelector('#white-mask').click();drag(.45,.45,.55,.55);
+        document.querySelector('#black-mask').click();drag(.6,.6,.7,.7);
+        drag(.65,.65,.675,.675,document.querySelector('.mask-block.selected'));
+        drag(.725,.725,.75,.75,document.querySelector('[data-mask-edge="se"]'));
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete'}));
+        if(document.querySelectorAll('.mask-block').length!==1)throw new Error('mask delete');
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true}));
+        if(document.querySelectorAll('.mask-block').length!==2)throw new Error('mask undo');
+        const before=document.querySelector('.mask-block.selected').style.left;
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight'}));
+        if(document.querySelector('.mask-block.selected').style.left===before)throw new Error('mask keyboard move');
+        document.querySelector('#mask-undo').click();
+        pointer('pointerdown',.8,.8);pointer('pointermove',.85,.85);
+        if(!document.querySelector('#confirm').disabled)throw new Error('cannot confirm during mask drag');
+        pointer('pointercancel',.85,.85);
+        if(document.querySelectorAll('.mask-block').length!==2)throw new Error('mask pointer cancellation');
+        document.querySelector('#select-tool').click();
+        document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight'}));document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft'}));
+      }`);
+      assert.equal(counts.ocr,before);
+    }
     await win.webContents.executeJavaScript(button?'document.querySelector("#confirm").click()':'document.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter"}));document.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter"}))').catch(error=>{if(!win.isDestroyed())throw error;});
   }
   await evalMain('document.querySelector("#capture").click()');
   let win = await overlay();
+  win.webContents.send('capture-frame',{dataUrl:source.toDataURL()});
+  await until(()=>win.webContents.executeJavaScript('document.querySelector("#white-mask").disabled'),'older desktop cannot offer masks it would ignore');
+  win.webContents.send('capture-frame',{dataUrl:source.toDataURL(),masksSupported:true});
+  await until(()=>win.webContents.executeJavaScript('!document.querySelector("#white-mask").disabled'),'current desktop mask capability');
   await win.webContents.executeJavaScript('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter"}))');
   assert.equal(win.isDestroyed(),false);assert.equal(counts.ocr,0);
   await win.webContents.executeJavaScript(`
@@ -138,6 +169,12 @@ async function run() {
   await until(() => evalMain('document.querySelector("#editor").disabled && document.querySelector("#notice").textContent.includes("自动识别")'), 'imported image shown while processing');
   const stored = await service.store.get(processing.itemId);
   assert.deepEqual(nativeImage.createFromDataURL(stored.source).getSize(), { width:320, height:200 });
+  const masked=nativeImage.createFromDataURL(stored.source).toBitmap(),pixel=(x,y)=>[...masked.subarray((y*320+x)*4,(y*320+x)*4+4)];
+  assert.deepEqual(pixel(64,40),[255,255,255,255]);
+  assert.deepEqual(pixel(180,110),[0,0,0,255]);
+  assert.deepEqual(pixel(10,10),[80,80,80,255]);
+  assert.deepEqual(source.toBitmap(),sourcePixels);
+  assert.deepEqual(nativeImage.createFromBuffer(imageSubmissions[0]).toBitmap(),masked);
   hotkeyCallback(); assert.equal(counts.ocr, 1); assert.equal(BrowserWindow.getAllWindows().length, 1);
   releaseOcr();
   await until(async () => (await getState()).phase === 'completed', 'OCR completes');

@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; base-uri 'none'">
-<title>Math Snip · 框选截图</title><link rel="stylesheet" href="capture.css"><script defer src="capture.js"></script></head>
-<body><img id="frame" draggable="false" alt="当前屏幕"><div id="shade"></div><div id="selection" hidden>
+<title>Math Snip · 框选截图</title><link rel="stylesheet" href="capture.css"><link rel="stylesheet" href="../public/mask-editor.css"><script type="module" src="capture.js"></script></head>
+<body><img id="frame" draggable="false" alt="当前屏幕"><div id="capture-masks" class="mask-layer"></div><div id="shade"></div><div id="selection" hidden>
 <span data-edge="nw"></span><span data-edge="n"></span><span data-edge="ne"></span><span data-edge="e"></span><span data-edge="se"></span><span data-edge="s"></span><span data-edge="sw"></span><span data-edge="w"></span>
 </div><div id="tip">拖动框选 · 可移动或调整边缘 · Enter 确认识别 · Esc / 右键取消</div>
-<div id="actions" hidden><span id="dimensions"></span><button id="reset">重新框选</button><button id="cancel">取消 Esc</button><button id="confirm">识别 Enter</button></div></body></html>
+<div id="actions" class="mask-tools" hidden><span id="dimensions"></span><button id="select-tool" aria-pressed="true">调整选区</button><button id="white-mask" aria-pressed="false"><span class="mask-swatch white"></span>白色遮罩</button><button id="black-mask" aria-pressed="false"><span class="mask-swatch black"></span>黑色遮罩</button><button id="mask-undo" disabled>撤销</button><button id="mask-delete" disabled>删除遮罩</button><button id="reset">重新框选</button><button id="cancel">取消 Esc</button><button id="confirm">识别 Enter</button></div></body></html>

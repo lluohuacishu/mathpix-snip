@@ -4,7 +4,7 @@
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Math Snip · 数学识别工作台</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/math-style.css"><link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/math-style.css"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/mask-editor.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -58,7 +58,7 @@
       <div class="document-meta"><div class="doc-name"><i data-lucide="file-text"></i><input id="title" aria-label="记录名称" value="未选择记录"><button id="rename-record" class="icon-button" aria-label="修改记录名称" title="修改记录名称" disabled><i data-lucide="pencil"></i></button><span id="demo-tag" class="tag" hidden>演示</span></div><span id="saved">自动保存</span></div>
       <div class="document-content">
         <div class="view" id="preview-view"><article class="paper" id="preview"><div class="empty-state"><i data-lucide="scan-text"></i><h2>把纸上的灵感带进来</h2><p>拖入图片或 PDF，或按 Ctrl + V 粘贴截图</p><button class="outline" id="empty-demo">先看看演示效果</button></div></article></div>
-        <div class="view original-view" id="original-view" hidden><div id="original"></div><button class="outline crop-button" id="crop" hidden><i data-lucide="crop"></i>裁剪为新截图</button></div>
+        <div class="view original-view" id="original-view" hidden><div id="original"></div><div class="image-edit-actions"><button class="outline" id="crop" hidden><i data-lucide="crop"></i>裁剪为新截图</button><button class="outline" id="mask-open" hidden><i data-lucide="square"></i>添加遮罩</button></div></div>
         <div class="view data-view" id="data-view" hidden><pre id="raw"></pre></div>
         <aside class="equation-panel" id="equation-panel"><div class="equation-heading"><strong>公式提取</strong><span id="formula-count">0</span></div><p>点击公式，直接复制 LaTeX</p><div id="equations"></div><button id="copy-formulas" class="outline"><i data-lucide="copy"></i>复制全部公式</button></aside>
       </div>
@@ -66,7 +66,7 @@
       <textarea id="editor" spellcheck="false" aria-label="LaTeX 和 Markdown 源码" placeholder="识别结果会出现在这里。也可以直接输入文字和 $LaTeX$ 公式…" disabled></textarea>
       <footer class="document-footer"><span id="confidence"><span class="dot"></span>就绪</span><span id="char-count">0 字符</span><span class="footer-right" id="word-status">默认生成官方 Word</span></footer>
     </section>
-    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.8.1</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
+    <footer class="workspace-footer"><span>Math Snip <span class="version">LOCAL / 1.9.0</span></span><span>基于 Mathpix OCR API · 非官方客户端</span></footer>
   </div>
 </main>
 <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" hidden>
@@ -166,10 +166,16 @@
 <dialog id="help-dialog">
   <div class="modal-heading"><span class="modal-icon"><i data-lucide="lightbulb"></i></span><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div>
   <h2>三步，把截图变成文档</h2>
-  <ol class="help-steps"><li><strong>截取或导入</strong><p>桌面版按 <span data-hotkey-label>Alt + Shift + Q</span> 框选，松开后可移动或缩放，按 Enter 或点“识别”提交并弹出结果。Esc 或右键取消。也可以拖入图片或 PDF。</p></li><li><strong>识别和校对</strong><p>普通导入或粘贴后点击“开始识别”。切换原图核对，直接修改下方源码。</p></li><li><strong>复制或导出</strong><p>点预览中的公式复制 LaTeX，或导出带可编辑公式的 DOCX。</p></li></ol>
+  <ol class="help-steps"><li><strong>截取或导入</strong><p>桌面版按 <span data-hotkey-label>Alt + Shift + Q</span> 框选，松开后可移动或缩放选区，也可添加白色或黑色遮罩，按 Enter 或点“识别”提交并弹出结果。Esc 或右键取消。也可以拖入图片或 PDF。</p></li><li><strong>识别和校对</strong><p>普通导入或粘贴后点击“开始识别”。切换原图核对，直接修改下方源码。</p></li><li><strong>复制或导出</strong><p>点预览中的公式复制 LaTeX，或导出带可编辑公式的 DOCX。</p></li></ol>
   <div class="help-tip">PDF 拖入后可选经济或快速模式；完成后自动保存 DOCX、普通 MD、原始 MMD 和配图到设置指定的目录下，是否自动打开 Word 可在设置中修改。截图结果仍可点击“导出 Word”保存打开。</div>
   <p class="micro">快捷键截图会自动上传选区到 Mathpix。关闭桌面窗口后仍在托盘运行；右键托盘图标可退出。多屏时截取鼠标所在屏幕。浏览器版可用 Win + Shift + S 截图，再 Ctrl + V 粘贴。历史包含原文件，保存在应用的本机数据目录。</p>
 </dialog>
 <dialog id="delete-dialog"><h2>删除这条记录？</h2><p class="subtle">将删除本机保存的原文件、识别结果和收藏状态。已导出的文档保留，此操作不会删除 Mathpix 云端记录。</p><div class="modal-footer"><button class="outline close">取消</button><button id="delete-confirm" class="danger">删除记录</button></div></dialog>
 <dialog id="crop-dialog"><div class="modal-heading"><h2>拖动选择识别区域</h2><button class="icon-button close" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="crop-area"><canvas id="crop-canvas"></canvas></div><div class="modal-footer"><span class="micro">生成新记录，保留原图</span><button id="crop-confirm" class="primary">保存裁剪</button></div></dialog>
+<dialog id="mask-dialog" aria-labelledby="mask-heading"><div class="modal-heading"><h2 id="mask-heading">遮罩图片</h2><button class="icon-button close" aria-label="关闭遮罩编辑"><i data-lucide="x"></i></button></div>
+  <p class="subtle">选择颜色后拖动绘制矩形，盖住不需要识别的内容。可移动、缩放遮罩；Delete 删除，Ctrl + Z 撤销。</p>
+  <div class="mask-tools"><button id="image-mask-white" class="outline" aria-pressed="true"><span class="mask-swatch white"></span>白色遮罩</button><button id="image-mask-black" class="outline" aria-pressed="false"><span class="mask-swatch black"></span>黑色遮罩</button><button id="image-mask-undo" class="outline" disabled>撤销</button><button id="image-mask-delete" class="outline" disabled>删除所选</button><button id="image-mask-clear" class="outline" disabled>清空遮罩</button><span id="mask-count" class="micro">0 个遮罩</span></div>
+  <div id="mask-stage"><img id="mask-image" draggable="false" alt="待遮罩的原图"><div id="image-masks" class="mask-layer"></div></div>
+  <p id="mask-error" class="inline-error" role="alert" hidden></p><div class="modal-footer"><span class="micro">另存为新记录，保留原图；保存后再点击“开始识别”</span><button id="mask-save" class="primary" disabled>保存遮罩图片</button></div>
+</dialog>
 </body></html>

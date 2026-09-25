@@ -12,7 +12,7 @@ for(const file of files){
  assert.ok(!/(?:^|\/)(?:\.env(?:\.|$)|credentials\.(?:dpapi|safe)$)|^public\/sample\.png$|^assets\/reference\.docx$|\.map$/i.test(file),'Private or unwanted file: '+file);
 }
 const ownFiles=files.filter(f=>!f.startsWith('node_modules/'));
-for(const expected of ['server.js','public/app.js','public/index.html','public/sample.svg','desktop/main.cjs','lib/credentials.js'])assert.ok(ownFiles.includes(expected),'Missing: '+expected);
+for(const expected of ['server.js','public/app.js','public/index.html','public/sample.svg','public/mask-editor.js','public/mask-editor.css','desktop/main.cjs','lib/credentials.js'])assert.ok(ownFiles.includes(expected),'Missing: '+expected);
 for(const f of ownFiles){if(!/\.(?:js|cjs|json|html|css|svg)$/.test(f))continue;const s=asar.extractFile(archive,f).toString('utf8');assert.ok(!/[A-Z]:\\+Users\\+/i.test(s),'Private machine information: '+f);}
 const pkg=JSON.parse(asar.extractFile(archive,'package.json').toString());
 console.log(JSON.stringify({result:'PASS',version:pkg.version,applicationEntries:ownFiles.length,archiveEntries:files.length,checks:['application allowlist','no runtime data or credentials','no private reference material','built frontend present']}));

@@ -6,13 +6,14 @@ import { initUsage } from './usage.js';
 import { initPreferences } from './preferences.js';
 import { initLocalFiles } from './local-files.js';
 import { confidenceLabel } from '../lib/confidence.js';
+import { initMasking } from './masking.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const state = { token: '', settings: {}, items: [], current: null, formulas: [], dirty: false, tab: 'preview', busy: false, showFormulas: true };
 let desktopState = null, desktopQueue = Promise.resolve();
 let preferencesUI, preferences = { autoOpenWord:true }, keyCheckRevision = 0;
-let localFilesUI, favoritesOnly = false;
+let localFilesUI, maskingUI, favoritesOnly = false;
 const favoritePending = new Set();
 let pdfMode = 'files', pdfRates = {files:0.0015,fast:0.005}, pdfDialogId, outputDirectory = '', originalSeq = 0;
 const pdfActive = item => !!item?.pdfTask && ['submitting','processing','saving'].includes(item.pdfTask.status);
@@ -116,6 +117,7 @@ async function showItem(item) {
   $('#recognize').disabled = state.busy || pdfActive(item) || item.demo || item.kind === 'text' || item.status === 'completed';
   $('#recognize').innerHTML = icon(item.pdfId ? 'refresh-cw' : 'scan-text') + (item.pdfId ? '继续查询' : '开始识别');
   $('#delete').disabled = state.busy; $('#crop').hidden = item.kind !== 'image' || item.demo;
+  $('#mask-open').hidden = item.kind !== 'image' || item.demo;
   updateNotice(); drawOriginal(item).catch(showError); setTab(item.mmd ? 'preview' : 'original'); drawHistory();
   await renderPreview();
   if (pdfActive(item) || (item.pdfId && item.status === 'processing')) schedulePoll(item.id);
@@ -134,6 +136,7 @@ function updateDesktopControls() {
   $('#recognize').disabled = state.busy || desktopState?.busy || active || !state.current || state.current.demo || state.current.kind === 'text' || state.current.status === 'completed';
   $('#delete').disabled = state.busy || active;
   $('#crop').disabled = active;
+  $('#mask-open').disabled = active||state.busy;
   $('#editor').disabled = !state.current || active;
   $('#title').disabled = active;
   $('#rename-record').disabled = !state.current || state.busy || active;
@@ -406,6 +409,7 @@ async function init() {
   pdfMode = boot.pdfMode || 'files'; pdfRates = boot.pdfRates || pdfRates; outputDirectory = boot.wordDirectory;
   $('#export-location').textContent = boot.wordDirectory || '当前用户的 Documents/Mathsnip';
   preferencesUI = initPreferences({ api, changed:updatePreferences });
+  maskingUI = initMasking({saveCurrent,importFile,toast});
   localFilesUI = initLocalFiles({api,saveCurrent,toast,refreshIcons,changed:async()=>{
     await refreshHistory();
     const id=state.current?.id;
@@ -487,11 +491,13 @@ async function init() {
       ++renderSeq; $('#editor').value = ''; $('#editor').disabled = true; $('#title').value = '未选择记录'; $('#demo-tag').hidden = true;
       $('#original').replaceChildren(); $('#raw').textContent = ''; $('#saved').textContent = ''; $('#confidence').innerHTML = '<span class="dot"></span>就绪';
       $('#recognize').disabled = false; $('#recognize').innerHTML = icon('scan-text') + '开始识别'; $('#crop').hidden = true;
+      $('#mask-open').hidden = true;
       state.formulas = []; await renderPreview(); setTab('preview'); updateNotice();
     }
     updatePdfPanel(); updateDesktopControls(); toast('记录已删除');
   });
   on('#crop','click',openCrop);
+  on('#mask-open','click',()=>maskingUI.open(state.current));
   on('#crop-canvas','pointerdown',e => { cropStart = cropPoint(e); e.target.setPointerCapture(e.pointerId); cropRect = null; });
   on('#crop-canvas','pointermove',e => { if (!cropStart) return; const p = cropPoint(e); cropRect = { x:Math.min(p.x,cropStart.x),y:Math.min(p.y,cropStart.y),w:Math.abs(p.x-cropStart.x),h:Math.abs(p.y-cropStart.y) }; paintCrop(); });
   on('#crop-canvas','pointerup',() => { cropStart = null; });

@@ -55,6 +55,19 @@ async function run(){
  const request=(ctx,route,body)=>fetch(ctx.base+'/api'+route,{method:'POST',headers:{'x-snip-token':ctx.boot.token,'Content-Type':'application/json'},body:JSON.stringify(body)});
  const html=await fetch(first.base).then(r=>r.text());assert.ok(html.includes('welcome-dialog'));
  assert.equal((await fetch(first.base+'/app.js')).status,200);assert.equal((await fetch(first.base+'/sample.svg')).status,200);
+ assert.equal((await fetch(first.base+'/mask-editor.js')).status,200);assert.equal((await fetch(first.base+'/mask-editor.css')).status,200);
+ const source=await first.evaluate(`(()=>{const c=document.createElement('canvas');c.width=400;c.height=240;const x=c.getContext('2d');x.fillStyle='#646464';x.fillRect(0,0,400,240);return c.toDataURL();})()`);
+ assert.equal((await request(first,'/items',{kind:'image',title:'Packaged mask.png',source})).status,200);
+ await first.evaluate('location.reload()');await until(first,'document.querySelector("#title")?.value==="Packaged mask.png" && !document.querySelector("#mask-open").disabled');
+ await first.evaluate('document.querySelector("#mask-open").click()');await until(first,'document.querySelector("#mask-dialog").open');
+ await first.evaluate(`{
+  const s=document.querySelector('#mask-stage'),r=s.getBoundingClientRect();s.setPointerCapture=()=>{};
+  for(const [type,x,y] of [['pointerdown',.1,.1],['pointermove',.4,.4],['pointerup',.4,.4]])s.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,pointerId:1,clientX:r.x+r.width*x,clientY:r.y+r.height*y}));
+  document.querySelector('#mask-save').click();
+ }`);
+ await until(first,'!document.querySelector("#mask-dialog").open && document.querySelector("#title").value==="Packaged mask-遮罩.png"');
+ const maskedPixels=await first.evaluate(`(async()=>{const img=document.querySelector('#original img');await img.decode();const c=document.createElement('canvas');c.width=400;c.height=240;const x=c.getContext('2d');x.drawImage(img,0,0);return [[...x.getImageData(80,48,1,1).data],[...x.getImageData(300,200,1,1).data]];})()`);
+ assert.deepEqual(maskedPixels,[[255,255,255,255],[100,100,100,255]]);
  const render=await request(first,'/render',{mmd:'中文公式 $x^2+1$'});assert.equal(render.status,200);assert.match((await render.json()).html,/mjx-container/);
  const saved=await request(first,'/settings',{appId:'fake-packaged-id',appKey:'fake-packaged-key',remember:true});assert.equal(saved.status,200);
  const encrypted=await readFile(path.join(dataDir,'credentials.safe'),'utf8');assert.ok(!encrypted.includes('fake-packaged'));
